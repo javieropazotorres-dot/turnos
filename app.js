@@ -28,7 +28,8 @@
     status:'loading', places:[], shifts:[], perfil:{nombre:'',titulo:'doctora'}, lastBackup:null,
     screen:'inicio', cobroMes:todayKey().slice(0,7), openShift:null, confirmDel:null,
     form:null, addOpen:false, nl:{name:'',rate:''}, error:'', editNombre:false,
-    optDetalle:lsGet('optDetalle',true), optMonto:lsGet('optMonto',false)
+    sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{step:'email',email:'',code:'',busy:false},
+    optMonto:lsGet('optMonto',false)
   };
   function newForm(){return {date:todayKey(),start:'08:00',hours:12,placeId:''};}
   S.form=newForm();
@@ -122,12 +123,13 @@
     });
     return h;
   };
+  function listaY(a){return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' y '+a[a.length-1];}
   function mensaje(pl,items,mk){
-    var t=(S.perfil.titulo||'doctora'), nombre=(S.perfil.nombre||'').trim()||'[nombre]';
-    var horas=sumH(items);
-    var m='Horas realizadas por la '+t+' '+nombre+' en '+pl.name+': '+fmtH(horas)+' horas durante el mes de '+monthLabel(mk)+'.';
-    if(S.optDetalle){m+='\n\nDetalle:\n'+items.map(function(s){return '• '+s.dow+' '+s.ddmm+': '+fmtH(s.hours)+' h ('+s.range+')';}).join('\n');}
-    if(S.optMonto&&Number(pl.rate)>0){m+='\n\nTotal: '+fmtH(horas)+' h × '+plata(pl.rate)+' = '+plata(horas*Number(pl.rate));}
+    var horas=sumH(items), mes=MES[Number(mk.slice(5))-1];
+    var dias=[];items.forEach(function(s){if(dias.indexOf(s.day)<0)dias.push(s.day);});
+    var m='Hola Doctoor,\n'+(dias.length===1?'El refuerzo de '+mes+' sería el '+dias[0]:'Los refuerzos de '+mes+' serían '+listaY(dias))+
+      '\n'+(horas===1?'Sería 1 hora':'Serían '+fmtH(horas)+' horas');
+    if(S.optMonto&&Number(pl.rate)>0){m+='\nTotal: '+plata(horas*Number(pl.rate));}
     return m;
   }
   V.cobros=function(){
@@ -145,7 +147,7 @@
     h+='<section class="list"><div class="between"><h2>Por lugar</h2></div>';
     if(!por.length)h+='<div class="empty">No hay turnos realizados en '+MES[Number(mk.slice(5))-1]+'.</div>';
     else{
-      h+='<div class="card toggles" style="padding:8px 14px"><span class="sub" style="padding-top:4px">El mensaje incluye:</span><label class="toggle"><input type="checkbox" id="opt-detalle" data-opt="optDetalle"'+(S.optDetalle?' checked':'')+'> Detalle de cada turno</label><label class="toggle"><input type="checkbox" id="opt-monto" data-opt="optMonto"'+(S.optMonto?' checked':'')+'> Monto a cobrar</label></div>';
+      h+='<div class="card toggles" style="padding:8px 14px"><span class="sub" style="padding-top:4px">El mensaje incluye:</span><label class="toggle"><input type="checkbox" id="opt-monto" data-opt="optMonto"'+(S.optMonto?' checked':'')+'> Monto a cobrar</label></div>';
     }
     por.forEach(function(x){
       var hs=sumH(x.items), rate=Number(x.p.rate)||0, msg=mensaje(x.p,x.items,mk);
@@ -163,6 +165,45 @@
       '<div class="field"><label for="'+prefix+'-valor">Valor por hora ($)</label><input class="input" id="'+prefix+'-valor" data-nl="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Opcional" value="'+esc(S.nl.rate)+'"></div>'+
       '<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="cancelAdd">Cancelar</button><button class="btn btn-sm btn-primary" data-act="saveAdd">Agregar</button></div></div>';
   }
+  function syncCard(){
+    var y=S.sync, a=S.auth, dis=a.busy?' disabled':'';
+    if(y.status==='off')return '';
+    var h='<section class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h2>Sincronización en la nube</h2>';
+    if(y.status==='out'){
+      if(a.step==='email'){
+        h+='<div class="note">Entra con tu correo para guardar los turnos en la nube y verlos en otros dispositivos. Te enviaremos un código de acceso.</div>'+
+           '<div class="field"><label for="auth-email">Correo</label><input class="input" id="auth-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" data-auth="email" value="'+esc(a.email)+'"></div>'+
+           '<button class="btn btn-sm btn-primary"'+dis+' data-act="sendCode">'+(a.busy?'Enviando…':'Enviar código')+'</button>';
+      }else{
+        h+='<div class="note">Escribe el código que llegó a <strong>'+esc(a.email)+'</strong>. Si no aparece, revisa la carpeta de spam.</div>'+
+           '<div class="field"><label for="auth-code">Código</label><input class="input num" id="auth-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" data-auth="code" value="'+esc(a.code)+'"></div>'+
+           '<div class="grid2"><button class="btn btn-sm btn-ghost"'+dis+' data-act="authBack">Cambiar correo</button><button class="btn btn-sm btn-primary"'+dis+' data-act="verifyCode">'+(a.busy?'Entrando…':'Entrar')+'</button></div>';
+      }
+      return h+'</section>';
+    }
+    var ls=y.lastSync?new Date(y.lastSync):null;
+    var est=y.status==='syncing'?'Sincronizando…'
+      :y.status==='ok'?'Todo sincronizado'+(ls?' · '+ls.getDate()+' de '+MES[ls.getMonth()]+', '+pad(ls.getHours())+':'+pad(ls.getMinutes()):'')
+      :y.status==='offline'?'Sin conexión. Los cambios quedan en el teléfono y se subirán solos.'
+      :'No se pudo sincronizar. Inténtalo de nuevo.';
+    if(y.pending&&y.status!=='ok')est+=' ('+y.pending+(y.pending===1?' cambio pendiente)':' cambios pendientes)');
+    h+='<div class="sub">Sesión iniciada con <strong>'+esc(y.email)+'</strong></div><div class="note" role="status">'+est+'</div>'+
+       '<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="syncNow"'+(y.status==='syncing'?' disabled':'')+'>Sincronizar ahora</button><button class="btn btn-sm btn-ghost" data-act="signOut">Cerrar sesión</button></div>';
+    return h+'</section>';
+  }
+  function authErr(e){
+    var m=(e&&(e.message||e.code)||'').toLowerCase();
+    if(m.indexOf('expired')>=0||m.indexOf('invalid')>=0)return 'El código no es válido o ya venció. Pide uno nuevo.';
+    if(m.indexOf('rate')>=0||(e&&e.status===429))return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
+    if(navigator.onLine===false||m.indexOf('fetch')>=0)return 'Sin conexión. Conéctate a internet para entrar.';
+    return 'No se pudo completar. Inténtalo de nuevo.';
+  }
+  async function authStep(fn,next){
+    S.auth.busy=true;rerender();
+    try{await fn();if(next)next();}
+    catch(e){console.error(e);toast(authErr(e));}
+    S.auth.busy=false;rerender();
+  }
   V.lugares=function(){
     var h='<div class="head"><div class="eyebrow">Centros donde hace turnos</div><h1>Lugares</h1></div><div class="list">';
     if(!S.places.length)h+='<div class="empty">Aún no hay lugares. Agrega el primero.</div>';
@@ -172,10 +213,9 @@
          '<div class="rate"><label for="rate-'+esc(p.id)+'">Valor hora ($)</label><input class="input num" id="rate-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" type="number" inputmode="numeric" min="0" step="500" placeholder="Sin valor" value="'+(Number(p.rate)>0?Number(p.rate):'')+'"></div></div>';
     });
     h+='</div>'+(S.addOpen?addPlaceBox('lp'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar lugar</button>');
-    h+='<section class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h2>Nombre en los mensajes</h2><div class="field"><label for="perfil-nombre">Nombre completo</label><input class="input" id="perfil-nombre" data-perfil="nombre" value="'+esc(S.perfil.nombre)+'" autocomplete="name"></div>'+
-       '<div class="field"><label for="perfil-titulo">Tratamiento</label><select class="input" id="perfil-titulo" data-perfil="titulo"><option value="doctora"'+(S.perfil.titulo!=='Dra.'?' selected':'')+'>doctora</option><option value="Dra."'+(S.perfil.titulo==='Dra.'?' selected':'')+'>Dra.</option></select></div><div class="note">Se usa en el mensaje de WhatsApp de Cobros. Se guarda al salir del campo.</div></section>';
-    var lb=S.lastBackup?new Date(S.lastBackup):null;
-    h+='<section class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h2>Respaldo de datos</h2><div class="note">Los turnos se guardan solo en este teléfono. Descarga un respaldo cada cierto tiempo y guárdalo en Drive, iCloud o envíatelo por correo.</div>'+
+    h+=syncCard();
+    var lb=S.lastBackup?new Date(S.lastBackup):null, enNube=S.sync.email!=='';
+    h+='<section class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h2>Respaldo de datos</h2><div class="note">'+(enNube?'Los turnos se guardan en la nube y en este teléfono. Igual puedes descargar un respaldo propio cuando quieras.':'Los turnos se guardan solo en este teléfono. Descarga un respaldo cada cierto tiempo y guárdalo en Drive, iCloud o envíatelo por correo.')+'</div>'+
        '<div class="sub">'+(lb?'Último respaldo: '+lb.getDate()+' de '+MES[lb.getMonth()]+' '+lb.getFullYear():'Todavía no hay respaldos.')+'</div>'+
        '<div class="grid2"><button class="btn btn-sm btn-primary" data-act="backup">Descargar respaldo</button><button class="btn btn-sm btn-ghost" data-act="csv">Exportar a Excel</button></div>'+
        '<label class="btn btn-sm btn-dashed btn-block" for="restore-file" style="cursor:pointer">Restaurar desde un respaldo</label><input type="file" id="restore-file" accept="application/json,.json" hidden></section>';
@@ -245,6 +285,23 @@
       write(function(){return Store.addShift(data);},'Turno guardado');
       go(dest);
     }
+    else if(a==='sendCode'){
+      var em=(S.auth.email||'').trim().toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Escribe un correo válido');return;}
+      S.auth.email=em;
+      authStep(function(){return Store.sendCode(em);},function(){S.auth.step='code';S.auth.code='';toast('Código enviado a '+em);});
+    }
+    else if(a==='verifyCode'){
+      var code=(S.auth.code||'').replace(/\D/g,'');
+      if(code.length<6){toast('Escribe el código completo');return;}
+      authStep(function(){return Store.verifyCode(S.auth.email,code);},function(){S.auth={step:'email',email:'',code:'',busy:false};toast('Sesión iniciada');});
+    }
+    else if(a==='authBack'){S.auth.step='email';S.auth.code='';rerender();}
+    else if(a==='syncNow'){Store.syncNow();}
+    else if(a==='signOut'){
+      if(!window.confirm('¿Cerrar sesión? Los turnos quedan en este teléfono, pero dejan de sincronizarse.'))return;
+      Store.signOut().then(function(){toast('Sesión cerrada');},function(){toast('No se pudo cerrar la sesión. Inténtalo de nuevo.');});
+    }
     else if(a==='backup'){download('turnos-respaldo-'+todayKey()+'.json',Store.exportJSON(),'application/json');toast('Respaldo descargado');}
     else if(a==='csv'){download('turnos-'+todayKey()+'.csv',toCSV(),'text/csv;charset=utf-8');}
     else if(a==='copy'){
@@ -266,17 +323,17 @@
       var pb=document.getElementById('pago-box'); if(pb){pb.hidden=!pago;document.getElementById('pago-txt').textContent=plata(pago);}
     }
     if(t.dataset.nl){S.nl[t.dataset.nl]=t.value;}
+    if(t.dataset.auth){S.auth[t.dataset.auth]=t.value;}
   });
   document.addEventListener('change',function(ev){
     var t=ev.target;
     if(t.id==='restore-file'&&t.files&&t.files[0]){
       var file=t.files[0];
-      if(!window.confirm('¿Reemplazar todos los datos de este teléfono con el respaldo «'+file.name+'»?')){t.value='';return;}
+      if(!window.confirm('¿Reemplazar todos los datos '+(S.sync.email?'(en este teléfono y en la nube)':'de este teléfono')+' con el respaldo «'+file.name+'»?')){t.value='';return;}
       file.text().then(function(txt){return Store.importJSON(txt);}).then(function(){toast('Respaldo restaurado');},function(){toast('Ese archivo no es un respaldo válido de la app.');});
       t.value='';return;
     }
     if(t.dataset.rate){var id=t.dataset.rate,v=Number(t.value)||0;write(function(){return Store.updatePlace(id,{rate:v});},'Valor por hora guardado');}
-    if(t.dataset.perfil){var k=t.dataset.perfil,val=t.value.trim();var patch={};patch[k]=val;S.perfil[k]=val;write(function(){return Store.setPerfil(patch);},'Guardado');}
     if(t.dataset.opt){S[t.dataset.opt]=t.checked;lsSet(t.dataset.opt,t.checked);rerender();}
   });
 
@@ -285,7 +342,7 @@
   function liveRender(){ if(busy()){pending=true;return;} rerender(); }
   document.addEventListener('focusout',function(){setTimeout(function(){if(pending&&!busy()){pending=false;rerender();}},0);});
 
-  function apply(st){S.places=st.places;S.shifts=st.shifts.filter(function(x){return typeof x.date==='string'&&x.date.length===10;});S.perfil=st.perfil;S.lastBackup=st.lastBackup;}
+  function apply(st){S.places=st.places;S.shifts=st.shifts.filter(function(x){return typeof x.date==='string'&&x.date.length===10;});S.perfil=st.perfil;S.lastBackup=st.lastBackup;S.sync=st.sync;}
   render();
   (async function(){
     try{ apply(await Store.init()); }catch(e){ S.status='nodb'; render(); return; }

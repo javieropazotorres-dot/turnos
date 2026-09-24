@@ -16,7 +16,11 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 ## Archivos
 - `index.html` — estructura, barra de navegación inferior, registro del service worker.
 - `styles.css` — tokens de color/tipografía (Fraunces + Instrument Sans) y componentes.
-- `store.js` — capa de datos (`window.Store`). Hoy usa localStorage con la clave `turnos:v1`. API async: `init, subscribe, getState, addShift, deleteShift, newPlaceId, addPlace, updatePlace, setPerfil, exportJSON, importJSON`. Reemplazar esta capa es la forma de cambiar el backend sin tocar `app.js`.
+- `store.js` — capa de datos (`window.Store`), local-first. Siempre guarda en localStorage (`turnos:v1`); con sesión en Supabase encola cada cambio en `turnos:outbox`, lo sube cuando hay red y luego descarga el estado de la nube, que pasa a ser la verdad. Sincroniza al abrir, al volver a la app y al recuperar conexión. La primera vez que un dispositivo entra a una cuenta (`turnos:linked`) sube solo las filas que la nube no tiene, sin pisar las existentes. API async: `init, subscribe, getState (incluye sync: {status, email, pending, lastSync}), addShift, deleteShift, newPlaceId, addPlace, updatePlace, setPerfil, exportJSON, importJSON, sendCode, verifyCode, signOut, syncNow`.
+- `config.js` — URL y clave publishable/anon de Supabase. Si están vacías, la app funciona solo local.
+- `supabase/schema.sql` — tablas `places`, `shifts`, `perfil` con RLS por `user_id` (no se sirve; se pega en el SQL Editor).
+- La librería `@supabase/supabase-js` se carga desde jsDelivr con versión fija e `integrity`; `sw.js` la guarda en caché. Al cambiar de versión, actualizar la URL y el hash en `index.html` y `sw.js`.
+- Login con código de un solo uso por correo (no enlace mágico: en iPhone el enlace abre Safari y no la app instalada, que tiene otro almacenamiento). La plantilla de correo de Supabase debe incluir `{{ .Token }}`.
 - `app.js` — estado de la UI (`S`), vistas (`V.inicio, V.realizadas, V.programadas, V.nuevo, V.cobros, V.historial, V.lugares`), eventos delegados por atributos `data-go`, `data-act`, `data-f`, `data-nl`, `data-rate`, `data-perfil`, `data-opt`.
 - `manifest.webmanifest`, `sw.js`, `icons/` — instalación y funcionamiento sin conexión.
 
@@ -27,11 +31,15 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 - `lastBackup`: ISO string o null.
 
 ## Mensaje de WhatsApp (pantalla Cobros, uno por lugar y mes)
-`Horas realizadas por la doctora <nombre> en <lugar>: <N> horas durante el mes de <mes> <año>.`
-Opcional: detalle por turno y monto total. Se abre con `https://wa.me/?text=<mensaje codificado>`; también hay botón Copiar.
+```
+Hola Doctoor,
+Los refuerzos de <mes> serían <días, ej. 10, 24, 25 y 27>
+Serían <N> horas
+```
+Con un solo día: `El refuerzo de <mes> sería el <día>` / `Sería 1 hora`. Opcional: línea `Total: $<monto>`. Se abre con `https://wa.me/?text=<mensaje codificado>`; también hay botón Copiar.
 
 ## Pendiente / ideas acordadas
-1. **Sincronización en la nube (prioridad):** reemplazar `store.js` por Supabase (auth con enlace mágico por correo o Google, tablas `places`, `shifts`, `perfil` con RLS por `user_id`), manteniendo la misma API y una migración que importe el respaldo JSON local.
+1. **Sincronización en la nube:** implementada en `store.js` (ver arriba). Falta crear el proyecto Supabase y completar `config.js`. `lastBackup` sigue siendo solo local. No hay tiempo real entre dispositivos: se sincroniza al abrir o volver a la app.
 2. Tarifas distintas por tipo de turno (noche, fin de semana, festivo) o monto fijo por turno.
 3. Editar un turno existente (hoy solo se puede eliminar).
 4. Recordatorio de respaldo si pasan más de 30 días sin descargar uno.

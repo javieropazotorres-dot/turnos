@@ -18,9 +18,17 @@ Se abre a pantalla completa, con su propio ícono y funciona sin internet.
 
 ## Dónde quedan los datos
 
-En el almacenamiento del navegador del teléfono (localStorage). No hay cuenta ni servidor.
+Siempre en el almacenamiento del navegador del teléfono (localStorage), así la app funciona sin internet.
+Si se inicia sesión en **Lugares → Sincronización en la nube** (con un código que llega por correo), los turnos también se guardan en Supabase y se ven en otros dispositivos.
 En **Lugares → Respaldo de datos** se puede descargar un respaldo (`.json`), restaurarlo y exportar todo a Excel (`.csv`).
-Conviene descargar un respaldo cada cierto tiempo.
+
+## Configurar Supabase (una vez)
+
+1. Crear un proyecto en supabase.com.
+2. **SQL Editor** → pegar el contenido de `supabase/schema.sql` → **Run**.
+3. **Authentication → Emails → Magic Link**: agregar el código al correo, por ejemplo `Tu código para Turnos es: {{ .Token }}`.
+4. **Project Settings → API**: copiar la URL del proyecto y la clave *publishable* (o *anon*) en `config.js`.
+5. Subir los cambios (y el número de `CACHE` en `sw.js`).
 
 ## Actualizar la app
 
