@@ -51,3 +51,6 @@ create policy "shifts propios" on public.shifts for all to authenticated
 drop policy if exists "perfil propio" on public.perfil;
 create policy "perfil propio" on public.perfil for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- Fin de semana: si está activo, las horas de día de sábado y domingo se pagan como noche.
+alter table public.places add column if not exists finde_noche boolean not null default false;

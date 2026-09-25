@@ -55,7 +55,23 @@
 <script src="app.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  // Cuando se activa una versión nueva, recarga para usarla; si hay un formulario en uso, espera.
+  var habiaVersion = !!navigator.serviceWorker.controller, pendiente = false;
+  function ocupado() {
+    var a = document.activeElement;
+    return !!document.getElementById('f-fecha') || !!(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName));
+  }
+  function recargar() { if (ocupado()) { pendiente = true; return; } location.reload(); }
+  navigator.serviceWorker.addEventListener('controllerchange', function () { if (habiaVersion) { recargar(); } else { habiaVersion = true; } });
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState !== 'visible') { return; }
+        if (pendiente) { recargar(); } else { reg.update().catch(function () {}); }
+      });
+    }).catch(function () {});
+  });
+  document.addEventListener('click', function () { if (pendiente) { setTimeout(recargar, 300); } });
 }
 </script>
 </body>
