@@ -28,7 +28,7 @@
     status:'loading', places:[], shifts:[], perfil:{nombre:'',titulo:'doctora'}, lastBackup:null,
     screen:'inicio', cobroMes:todayKey().slice(0,7), openShift:null, confirmDel:null,
     form:null, addOpen:false, nl:{name:'',rate:''}, error:'', editNombre:false,
-    sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{step:'email',email:'',code:'',busy:false},
+    sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{mode:'entrar',email:'',pass:'',busy:false},
     optMonto:lsGet('optMonto',false)
   };
   function newForm(){return {date:todayKey(),start:'08:00',hours:12,placeId:''};}
@@ -170,15 +170,13 @@
     if(y.status==='off')return '';
     var h='<section class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h2>Sincronización en la nube</h2>';
     if(y.status==='out'){
-      if(a.step==='email'){
-        h+='<div class="note">Entra con tu correo para guardar los turnos en la nube y verlos en otros dispositivos. Te enviaremos un código de acceso.</div>'+
-           '<div class="field"><label for="auth-email">Correo</label><input class="input" id="auth-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" data-auth="email" value="'+esc(a.email)+'"></div>'+
-           '<button class="btn btn-sm btn-primary"'+dis+' data-act="sendCode">'+(a.busy?'Enviando…':'Enviar código')+'</button>';
-      }else{
-        h+='<div class="note">Escribe el código que llegó a <strong>'+esc(a.email)+'</strong>. Si no aparece, revisa la carpeta de spam.</div>'+
-           '<div class="field"><label for="auth-code">Código</label><input class="input num" id="auth-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" data-auth="code" value="'+esc(a.code)+'"></div>'+
-           '<div class="grid2"><button class="btn btn-sm btn-ghost"'+dis+' data-act="authBack">Cambiar correo</button><button class="btn btn-sm btn-primary"'+dis+' data-act="verifyCode">'+(a.busy?'Entrando…':'Entrar')+'</button></div>';
-      }
+      var crear=a.mode==='crear';
+      h+='<div class="note">'+(crear?'Crea una cuenta con tu correo y una contraseña de al menos 8 caracteres. Se pide una sola vez en cada teléfono.':'Entra con tu correo y contraseña para guardar los turnos en la nube y verlos en otros dispositivos. Se pide una sola vez en cada teléfono.')+'</div>'+
+         '<form id="auth-form" style="display:flex;flex-direction:column;gap:10px" novalidate>'+
+         '<div class="field"><label for="auth-email">Correo</label><input class="input" id="auth-email" name="email" type="email" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" data-auth="email" value="'+esc(a.email)+'"></div>'+
+         '<div class="field"><label for="auth-pass">Contraseña</label><input class="input" id="auth-pass" name="password" type="password" autocomplete="'+(crear?'new-password':'current-password')+'" minlength="8" data-auth="pass" value="'+esc(a.pass)+'"></div>'+
+         '<button type="submit" class="btn btn-sm btn-primary"'+dis+'>'+(a.busy?(crear?'Creando…':'Entrando…'):(crear?'Crear cuenta':'Entrar'))+'</button></form>'+
+         '<button class="btn btn-sm btn-ghost"'+dis+' data-act="authMode">'+(crear?'Ya tengo cuenta':'Primera vez: crear cuenta')+'</button>';
       return h+'</section>';
     }
     var ls=y.lastSync?new Date(y.lastSync):null;
@@ -192,8 +190,12 @@
     return h+'</section>';
   }
   function authErr(e){
-    var m=(e&&(e.message||e.code)||'').toLowerCase();
-    if(m.indexOf('expired')>=0||m.indexOf('invalid')>=0)return 'El código no es válido o ya venció. Pide uno nuevo.';
+    var m=((e&&e.code||'')+' '+(e&&e.message||'')).toLowerCase();
+    if(m.indexOf('invalid_credentials')>=0||m.indexOf('invalid login')>=0)return 'Correo o contraseña incorrectos.';
+    if(m.indexOf('already')>=0||m.indexOf('user_already_exists')>=0)return 'Ese correo ya tiene cuenta. Usa «Ya tengo cuenta» para entrar.';
+    if(m.indexOf('weak_password')>=0||m.indexOf('password should')>=0)return 'La contraseña es muy débil. Usa al menos 8 caracteres.';
+    if(m.indexOf('confirm')>=0)return 'Falta un ajuste en Supabase: desactivar la confirmación por correo.';
+    if(m.indexOf('signup')>=0&&m.indexOf('disabled')>=0)return 'No se pueden crear cuentas nuevas. Usa «Ya tengo cuenta».';
     if(m.indexOf('rate')>=0||(e&&e.status===429))return 'Demasiados intentos. Espera unos minutos y vuelve a probar.';
     if(navigator.onLine===false||m.indexOf('fetch')>=0)return 'Sin conexión. Conéctate a internet para entrar.';
     return 'No se pudo completar. Inténtalo de nuevo.';
@@ -285,18 +287,7 @@
       write(function(){return Store.addShift(data);},'Turno guardado');
       go(dest);
     }
-    else if(a==='sendCode'){
-      var em=(S.auth.email||'').trim().toLowerCase();
-      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Escribe un correo válido');return;}
-      S.auth.email=em;
-      authStep(function(){return Store.sendCode(em);},function(){S.auth.step='code';S.auth.code='';toast('Código enviado a '+em);});
-    }
-    else if(a==='verifyCode'){
-      var code=(S.auth.code||'').replace(/\D/g,'');
-      if(code.length<6){toast('Escribe el código completo');return;}
-      authStep(function(){return Store.verifyCode(S.auth.email,code);},function(){S.auth={step:'email',email:'',code:'',busy:false};toast('Sesión iniciada');});
-    }
-    else if(a==='authBack'){S.auth.step='email';S.auth.code='';rerender();}
+    else if(a==='authMode'){S.auth.mode=S.auth.mode==='crear'?'entrar':'crear';S.auth.pass='';rerender();}
     else if(a==='syncNow'){Store.syncNow();}
     else if(a==='signOut'){
       if(!window.confirm('¿Cerrar sesión? Los turnos quedan en este teléfono, pero dejan de sincronizarse.'))return;
@@ -308,6 +299,16 @@
       var pre=document.getElementById('msg-'+id); var txt=pre?pre.textContent:'';
       try{navigator.clipboard.writeText(txt).then(function(){toast('Mensaje copiado');},function(){fallbackCopy(pre);});}catch(e){fallbackCopy(pre);}
     }
+  });
+  document.addEventListener('submit',function(ev){
+    if(ev.target.id!=='auth-form')return;
+    ev.preventDefault();
+    if(S.auth.busy)return;
+    var fd=new FormData(ev.target), em=String(fd.get('email')||'').trim().toLowerCase(), pw=String(fd.get('password')||''), crear=S.auth.mode==='crear';
+    S.auth.email=em;S.auth.pass=pw;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){toast('Escribe un correo válido');return;}
+    if(pw.length<(crear?8:1)){toast(crear?'La contraseña debe tener al menos 8 caracteres':'Escribe tu contraseña');return;}
+    authStep(function(){return crear?Store.signUp(em,pw):Store.signIn(em,pw);},function(){S.auth={mode:'entrar',email:'',pass:'',busy:false};toast(crear?'Cuenta creada':'Sesión iniciada');});
   });
   function download(name,text,type){var blob=new Blob([type.indexOf('csv')>=0?'\ufeff'+text:text],{type:type});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);}
   function csvCell(v){v=String(v==null?'':v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}

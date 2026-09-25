@@ -19,16 +19,23 @@ Se abre a pantalla completa, con su propio ícono y funciona sin internet.
 ## Dónde quedan los datos
 
 Siempre en el almacenamiento del navegador del teléfono (localStorage), así la app funciona sin internet.
-Si se inicia sesión en **Lugares → Sincronización en la nube** (con un código que llega por correo), los turnos también se guardan en Supabase y se ven en otros dispositivos.
+Si se inicia sesión en **Lugares → Sincronización en la nube** (correo y contraseña, una vez por teléfono), los turnos también se guardan en Supabase y se ven en otros dispositivos.
 En **Lugares → Respaldo de datos** se puede descargar un respaldo (`.json`), restaurarlo y exportar todo a Excel (`.csv`).
 
 ## Configurar Supabase (una vez)
 
 1. Crear un proyecto en supabase.com.
 2. **SQL Editor** → pegar el contenido de `supabase/schema.sql` → **Run**.
-3. **Authentication → Emails → Magic Link**: agregar el código al correo, por ejemplo `Tu código para Turnos es: {{ .Token }}`.
+3. **Authentication → Sign In / Providers → Email**: desactivar **Confirm email** (la app no envía correos).
 4. **Project Settings → API**: copiar la URL del proyecto y la clave *publishable* (o *anon*) en `config.js`.
 5. Subir los cambios (y el número de `CACHE` en `sw.js`).
+6. Cuando ya estén creadas las cuentas desde la app, desactivar **Allow new users to sign up** en **Authentication → Sign In / Providers**, para que nadie más pueda crear cuentas.
+
+Si se olvida una contraseña, se puede cambiar desde **SQL Editor** (reemplazando el correo y la contraseña nueva):
+
+```sql
+update auth.users set encrypted_password = crypt('contraseña-nueva', gen_salt('bf')) where email = 'correo@ejemplo.cl';
+```
 
 ## Actualizar la app
 

@@ -243,13 +243,15 @@
     },
 
     // --- Cuenta ---
-    sendCode: async function (email) {
-      var res = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } });
+    signIn: async function (email, password) {
+      var res = await sb.auth.signInWithPassword({ email: email, password: password });
       if (res.error) { throw res.error; }
     },
-    verifyCode: async function (email, code) {
-      var res = await sb.auth.verifyOtp({ email: email, token: code, type: 'email' });
+    signUp: async function (email, password) {
+      var res = await sb.auth.signUp({ email: email, password: password });
       if (res.error) { throw res.error; }
+      // Sin sesión significa que Supabase tiene activada la confirmación por correo.
+      if (!res.data || !res.data.session) { var e = new Error('confirm_required'); e.code = 'confirm_required'; throw e; }
     },
     signOut: async function () {
       await syncNow();
