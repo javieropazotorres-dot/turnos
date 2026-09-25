@@ -25,8 +25,8 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 - `manifest.webmanifest`, `sw.js`, `icons/` — instalación y funcionamiento sin conexión.
 
 ## Modelo de datos
-- `places[]`: `{ id, name, rate (valor hora día CLP, 0 = sin definir), rateNoche (valor hora noche, 0 = igual al de día), feriadoNoche (bool: en feriado todas las horas se pagan como noche), findeNoche (bool: las horas de día de sábado y domingo se pagan como noche), color (índice de paleta 0–6), order }` — en Supabase `rate_noche`, `feriado_noche`, `finde_noche` y `sort`. En Lugares cada centro muestra solo su nombre y un botón Editar (borrador en `S.pe`).
-- Día/noche: cada hora del turno se cobra según cae entre `DIA_INI` y `DIA_FIN` (08:00–20:00, constantes en `app.js`); el resto es noche. Un turno que cruza ambos se divide (ej. 14:00 + 12 h = 6 h día + 6 h noche).
+- `places[]`: `{ id, name, rate (valor hora día CLP, 0 = sin definir), rateNoche (valor hora noche, 0 = igual al de día), feriadoNoche (bool: en feriado todas las horas se pagan como noche), findeNoche (bool: las horas de día de sábado y domingo se pagan como noche), color (índice de paleta 0–6), order }` — en Supabase `rate_noche`, `feriado_noche`, `finde_noche` y `sort`. En Lugares cada centro muestra solo su nombre y un botón Editar (borrador en `S.pe`); tocar el círculo abre la paleta de 7 colores.
+- Día/noche: cada hora del turno se cobra según cae entre `DIA_INI` y `DIA_FIN` (día 08:00–24:00, noche 00:00–08:00; constantes en `app.js`). Un turno que cruza ambos se divide (ej. 20:00 + 12 h = 4 h día + 8 h noche).
 - `shifts[]`: `{ id, date, start, hours, placeId, placeName, feriado (bool), createdAt }` — un turno es "realizado" si `date < hoy`, "programado" si `date >= hoy`. El recuadro grande de Inicio usa la hora real: muestra el turno en curso (inicio ≤ ahora < fin, aunque haya empezado ayer) o, si no hay, el próximo que aún no empieza; se refresca cada minuto.
 - `perfil`: `{ nombre, titulo ('doctora' | 'Dra.') }`
 - `lastBackup`: ISO string o null.
@@ -35,7 +35,7 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 Muestra bruto y líquido aproximado (`RETENCION` = 15,25 %, retención de boletas de honorarios 2026, en `app.js`).
 
 ## Gestos
-Deslizar de izquierda a derecha vuelve atrás; `touch-action: manipulation` evita el zoom con doble toque. Mientras se escribe en un campo de texto, `body.typing` oculta la barra inferior para que el teclado no tape el formulario. Al activarse un service worker nuevo, `index.html` recarga la página (espera si hay un formulario en uso).
+Deslizar de izquierda a derecha vuelve atrás; `touch-action: manipulation` evita el zoom con doble toque. Mientras se escribe en un campo de texto, `body.typing` oculta la barra inferior para que el teclado no tape el formulario. `sw.js` pide los archivos propios con `cache: 'no-cache'` para no quedar con la caché HTTP de GitHub Pages (10 min). Al activarse un service worker nuevo, `index.html` recarga la página (espera si hay un formulario en uso).
 
 ## Mensaje de WhatsApp (pantalla Cobros, uno por lugar y mes)
 ```
@@ -47,7 +47,7 @@ Con un solo día: `El refuerzo de <mes> sería el <día>` / `Sería 1 hora`. Opc
 
 ## Pendiente / ideas acordadas
 1. **Sincronización en la nube:** hecha. Proyecto Supabase `equebyacfqsobhrljjwv`, cuenta creada con el correo de María Fernanda y registro de cuentas nuevas desactivado. `lastBackup` sigue siendo solo local. No hay tiempo real entre dispositivos: se sincroniza al abrir o volver a la app.
-2. Tarifas: día/noche hecho (horario 08:00–20:00 confirmado). Feriado: casilla en el turno; si el lugar tiene `feriadoNoche`, todo se cobra como noche (así en los SAR; en la clínica aún no se sabe). Fin de semana: opción por lugar `findeNoche` (activa solo en SAR La Florida). Pendiente: monto fijo por turno.
+2. Tarifas: día/noche hecho (noche 00:00–08:00 confirmado). Feriado: casilla en el turno; si el lugar tiene `feriadoNoche`, todo se cobra como noche (así en los SAR; en la clínica aún no se sabe). Fin de semana: opción por lugar `findeNoche` (activa solo en SAR La Florida). Pendiente: monto fijo por turno.
 3. **Editar un turno:** hecho (botón Editar al abrir un turno; reutiliza la vista `nuevo` con `S.editId`).
 4. **Recordatorio de respaldo:** hecho. Aviso en Inicio si hay turnos y nunca se descargó un respaldo o pasaron 30+ días (`lastBackup`, local por dispositivo); "Ahora no" lo oculta 7 días (`backupSnooze` en localStorage).
 

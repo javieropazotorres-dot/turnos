@@ -1,6 +1,6 @@
 // Service worker: guarda los archivos de la app para que abra sin internet.
 // IMPORTANTE: cambia CACHE cada vez que publiques cambios, o los teléfonos seguirán viendo la versión anterior.
-const CACHE = 'turnos-v10';
+const CACHE = 'turnos-v11';
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js';
 const ASSETS = [
   './',
@@ -40,7 +40,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(req)
+      // no-cache: revalida con el servidor en vez de usar la caché HTTP (GitHub Pages guarda 10 min).
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return res; })
         .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
     );

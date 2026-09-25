@@ -41,7 +41,7 @@
   function placeById(id){for(var i=0;i<S.places.length;i++){if(S.places[i].id===id)return S.places[i];}return null;}
   function colorOf(pl,idx){return 'var('+PAL[((pl&&pl.color!=null?pl.color:idx)||0)%PAL.length]+')';}
   // Horario de día; el resto de las horas se cobra como noche.
-  var DIA_INI=8*60, DIA_FIN=20*60;
+  var DIA_INI=8*60, DIA_FIN=24*60;
   // Horas dentro del horario de día; con sinFinde, las de sábado y domingo no cuentan como día.
   function horasDia(date,start,h,sinFinde){
     var dow0=date?parse(date).getDay():1, t0=mins(start,0), t1=t0+Math.round((Number(h)||0)*60), m=0;
@@ -131,9 +131,13 @@
       var tn=tiempos(nx);
       var etiqueta=curso?'Turno en curso':'Próximo turno';
       var pill=curso?'Quedan '+duracion(tn.fin-now):tn.ini-now<12*3600000?'En '+duracion(tn.ini-now):nx.rel;
-      h+='<div class="hero"><div class="between"><span class="label">'+etiqueta+'</span><span class="pill">'+pill+'</span></div>'+
+      var abierto=S.openShift===nx.id;
+      h+='<div class="hero" data-act="toggleShift" data-id="'+esc(nx.id)+'" role="button" tabindex="0" aria-expanded="'+abierto+'" style="cursor:pointer"><div class="between"><span class="label">'+etiqueta+'</span><span class="pill">'+pill+'</span></div>'+
          '<div class="head"><div class="big cap" style="font-size:26px">'+nx.largo+'</div><div style="font-size:16px">'+esc(nx.place)+'</div></div>'+
-         '<div class="row" style="gap:20px;font-size:14px"><span class="num">'+nx.range+'</span><strong class="num">'+fmtH(nx.hours)+' h</strong></div></div>';
+         '<div class="row" style="gap:20px;font-size:14px"><span class="num">'+nx.range+(nx.feriado?' · Feriado':'')+'</span><strong class="num">'+fmtH(nx.hours)+' h</strong></div>'+
+         (!abierto?'':S.confirmDel===nx.id
+           ?'<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="cancelDel">Cancelar</button><button class="btn btn-sm btn-danger" data-act="doDel" data-id="'+esc(nx.id)+'">Sí, eliminar</button></div>'
+           :'<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="editShift" data-id="'+esc(nx.id)+'">Editar</button><button class="btn btn-sm btn-ghost" data-act="askDel" data-id="'+esc(nx.id)+'">Eliminar</button></div>')+'</div>';
     }
     h+='<section class="list"><h2>'+(nx?'Después':'Próximos turnos')+'</h2>';
     if(rest.length){h+=rest.map(function(s){return shiftCard(s,false);}).join('');}
@@ -262,10 +266,11 @@
     if(!S.places.length)h+='<div class="empty">Aún no hay lugares. Agrega el primero.</div>';
     S.places.forEach(function(p,i){
       var dot='<span class="dot" style="width:12px;height:12px;background:'+colorOf(p,i)+'"></span>';
-      if(S.editPlace!==p.id){h+='<div class="card place-row">'+dot+'<span class="place grow">'+esc(p.name)+'</span><button class="btn btn-sm btn-ghost" data-act="editPlace" data-id="'+esc(p.id)+'">Editar</button></div>';return;}
+      if(S.editPlace!==p.id){h+='<div class="card place-row"><button class="dot-btn" data-act="editPlace" data-color="1" data-id="'+esc(p.id)+'" aria-label="Cambiar color de '+esc(p.name)+'">'+dot+'</button><span class="place grow">'+esc(p.name)+'</span><button class="btn btn-sm btn-ghost" data-act="editPlace" data-id="'+esc(p.id)+'">Editar</button></div>';return;}
       var e=S.pe;
-      h+='<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div class="row" style="gap:10px">'+dot+'<strong>Editar lugar</strong></div>'+
+      h+='<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div class="row" style="gap:10px"><button class="dot-btn" data-act="peColorToggle" aria-expanded="'+!!S.peColorOpen+'" aria-label="Cambiar color"><span class="dot" style="width:12px;height:12px;background:var('+PAL[e.color]+')"></span></button><strong>Editar lugar</strong></div>'+
          '<div class="field"><label for="pe-name">Nombre</label><input class="input" id="pe-name" data-pe="name" value="'+esc(e.name)+'" autocomplete="off"></div>'+
+         (!S.peColorOpen?'':'<div class="field"><span class="lbl">Color</span><div class="swatches">'+PAL.map(function(v,ci){return '<button class="swatch" data-act="peColor" data-c="'+ci+'" aria-pressed="'+(e.color===ci)+'" aria-label="Color '+(ci+1)+'" style="background:var('+v+')"></button>';}).join('')+'</div></div>')+
          '<div class="grid2"><div class="field"><label for="pe-rate">Hora día ($)</label><input class="input num" id="pe-rate" data-pe="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Sin valor" value="'+esc(e.rate)+'"></div>'+
          '<div class="field"><label for="pe-noche">Hora noche ($)</label><input class="input num" id="pe-noche" data-pe="rateNoche" type="number" inputmode="numeric" min="0" step="500" placeholder="Igual a día" value="'+esc(e.rateNoche)+'"></div></div>'+
          '<div class="toggles"><label class="toggle"><input type="checkbox" data-pe="feriadoNoche"'+(e.feriadoNoche?' checked':'')+'> Feriado se paga como noche</label>'+
@@ -334,15 +339,17 @@
     else if(a==='pick'){S.form.placeId=id;S.error='';rerender();}
     else if(a==='editPlace'){
       var ep=placeById(id); if(!ep)return;
-      S.editPlace=id;S.pe={name:ep.name,rate:Number(ep.rate)>0?Number(ep.rate):'',rateNoche:Number(ep.rateNoche)>0?Number(ep.rateNoche):'',feriadoNoche:!!ep.feriadoNoche,findeNoche:!!ep.findeNoche};rerender();
+      S.editPlace=id;S.peColorOpen=b.getAttribute('data-color')==='1';S.pe={color:(Number(ep.color)||0)%PAL.length,name:ep.name,rate:Number(ep.rate)>0?Number(ep.rate):'',rateNoche:Number(ep.rateNoche)>0?Number(ep.rateNoche):'',feriadoNoche:!!ep.feriadoNoche,findeNoche:!!ep.findeNoche};rerender();
     }
+    else if(a==='peColor'){S.pe.color=Number(b.getAttribute('data-c'));S.peColorOpen=false;rerender();}
+    else if(a==='peColorToggle'){S.peColorOpen=!S.peColorOpen;rerender();}
     else if(a==='cancelPlace'){S.editPlace=null;rerender();}
     else if(a==='savePlace'){
       var e=S.pe, nm=(e.name||'').trim(), num=function(v){return Math.max(0,Math.round(Number(v)||0));};
       if(!nm){toast('Escribe el nombre del lugar');return;}
       if(S.places.some(function(p){return p.id!==id&&p.name.toLowerCase()===nm.toLowerCase();})){toast('Ya hay otro lugar con ese nombre');return;}
       S.editPlace=null;
-      write(function(){return Store.updatePlace(id,{name:nm,rate:num(e.rate),rateNoche:num(e.rateNoche),feriadoNoche:!!e.feriadoNoche,findeNoche:!!e.findeNoche});},'Lugar guardado');
+      write(function(){return Store.updatePlace(id,{name:nm,color:e.color,rate:num(e.rate),rateNoche:num(e.rateNoche),feriadoNoche:!!e.feriadoNoche,findeNoche:!!e.findeNoche});},'Lugar guardado');
     }
     else if(a==='openAdd'){S.addOpen=true;rerender();var i=document.querySelector('[data-nl="name"]');if(i)i.focus();}
     else if(a==='cancelAdd'){S.addOpen=false;S.nl={name:'',rate:'',rateNoche:''};rerender();}
