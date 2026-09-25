@@ -1,6 +1,6 @@
 // Service worker: guarda los archivos de la app para que abra sin internet.
 // IMPORTANTE: cambia CACHE cada vez que publiques cambios, o los teléfonos seguirán viendo la versión anterior.
-const CACHE = 'turnos-v4';
+const CACHE = 'turnos-v5';
 const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js';
 const ASSETS = [
   './',

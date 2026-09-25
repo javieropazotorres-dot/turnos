@@ -25,7 +25,8 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 - `manifest.webmanifest`, `sw.js`, `icons/` — instalación y funcionamiento sin conexión.
 
 ## Modelo de datos
-- `places[]`: `{ id, name, rate (valor hora CLP, 0 = sin definir), color (índice de paleta 0–6), order }`
+- `places[]`: `{ id, name, rate (valor hora día CLP, 0 = sin definir), rateNoche (valor hora noche, 0 = igual al de día), color (índice de paleta 0–6), order }` — en Supabase `rate_noche` y `sort`.
+- Día/noche: cada hora del turno se cobra según cae entre `DIA_INI` y `DIA_FIN` (08:00–20:00, constantes en `app.js`); el resto es noche. Un turno que cruza ambos se divide (ej. 14:00 + 12 h = 6 h día + 6 h noche).
 - `shifts[]`: `{ id, date, start, hours, placeId, placeName, createdAt }` — un turno es "realizado" si `date < hoy`, "programado" si `date >= hoy`.
 - `perfil`: `{ nombre, titulo ('doctora' | 'Dra.') }`
 - `lastBackup`: ISO string o null.
@@ -40,7 +41,7 @@ Con un solo día: `El refuerzo de <mes> sería el <día>` / `Sería 1 hora`. Opc
 
 ## Pendiente / ideas acordadas
 1. **Sincronización en la nube:** hecha. Proyecto Supabase `equebyacfqsobhrljjwv`, cuenta creada con el correo de María Fernanda y registro de cuentas nuevas desactivado. `lastBackup` sigue siendo solo local. No hay tiempo real entre dispositivos: se sincroniza al abrir o volver a la app.
-2. Tarifas distintas por tipo de turno (noche, fin de semana, festivo) o monto fijo por turno.
+2. Tarifas: día/noche hecho (falta confirmar con ella el horario 08:00–20:00). Pendiente: fin de semana, festivo o monto fijo por turno.
 3. **Editar un turno:** hecho (botón Editar al abrir un turno; reutiliza la vista `nuevo` con `S.editId`).
 4. Recordatorio de respaldo si pasan más de 30 días sin descargar uno.
 

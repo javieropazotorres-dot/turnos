@@ -11,6 +11,9 @@ create table if not exists public.places (
   primary key (user_id, id)
 );
 
+-- Valor hora de noche (0 = igual al de día). Agregado después; seguro de ejecutar de nuevo.
+alter table public.places add column if not exists rate_noche integer not null default 0 check (rate_noche >= 0);
+
 create table if not exists public.shifts (
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   id text not null,

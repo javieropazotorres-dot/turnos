@@ -27,7 +27,7 @@
   var S={
     status:'loading', places:[], shifts:[], perfil:{nombre:'',titulo:'doctora'}, lastBackup:null,
     screen:'inicio', cobroMes:todayKey().slice(0,7), openShift:null, confirmDel:null, editId:null, backTo:'inicio',
-    form:null, addOpen:false, nl:{name:'',rate:''}, error:'', editNombre:false,
+    form:null, addOpen:false, nl:{name:'',rate:'',rateNoche:''}, error:'', editNombre:false,
     sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{mode:'entrar',email:'',pass:'',busy:false},
     optMonto:lsGet('optMonto',false)
   };
@@ -40,9 +40,21 @@
 
   function placeById(id){for(var i=0;i<S.places.length;i++){if(S.places[i].id===id)return S.places[i];}return null;}
   function colorOf(pl,idx){return 'var('+PAL[((pl&&pl.color!=null?pl.color:idx)||0)%PAL.length]+')';}
+  // Horario de día; el resto de las horas se cobra como noche.
+  var DIA_INI=8*60, DIA_FIN=20*60;
+  function horasDia(start,h){
+    var t0=mins(start,0), t1=t0+Math.round((Number(h)||0)*60), m=0;
+    for(var d=Math.floor(t0/1440)-1;d<=Math.floor(t1/1440);d++){var a=Math.max(t0,d*1440+DIA_INI),b=Math.min(t1,d*1440+DIA_FIN);if(b>a)m+=b-a;}
+    return m/60;
+  }
+  // Si falta una de las dos tarifas, se usa la otra.
+  function tarifas(pl){var d=pl&&Number(pl.rate)>0?Number(pl.rate):0,n=pl&&Number(pl.rateNoche)>0?Number(pl.rateNoche):0;return {dia:d||n,noche:n||d};}
+  function calc(pl,start,h){h=Number(h)||0;var hd=horasDia(start,h),hn=h-hd,r=tarifas(pl);return {hDia:hd,hNoche:hn,rate:r.dia,pago:hd*r.dia+hn*r.noche};}
+  function tramos(hd,hn){return hd&&hn?fmtH(hd)+' h de día y '+fmtH(hn)+' h de noche':hn?'todo de noche':'todo de día';}
+  function finTxt(f){var h=Number(f.hours)||0,c=calc(null,f.start,h);return 'Termina a las '+finLargo(f.start,h)+(h?' · '+tramos(c.hDia,c.hNoche):'');}
   function deco(s){
     var dt=parse(s.date), pl=placeById(s.placeId), T=todayKey(), n=diffDays(s.date,T);
-    var rate=pl&&Number(pl.rate)>0?Number(pl.rate):0;
+    var c=calc(pl,s.start,s.hours);
     return {
       id:s.id, date:s.date, start:s.start, hours:Number(s.hours)||0, placeId:s.placeId,
       place:pl?pl.name:(s.placeName||'Lugar'), color:colorOf(pl,0),
@@ -50,7 +62,7 @@
       largo:DOWL[dt.getDay()]+' '+dt.getDate()+' de '+MES[dt.getMonth()],
       ddmm:pad(dt.getDate())+'/'+pad(dt.getMonth()+1),
       range:s.start+' – '+finCorto(s.start,s.hours),
-      rate:rate, pago:rate*(Number(s.hours)||0),
+      rate:c.rate, pago:c.pago, hDia:c.hDia, hNoche:c.hNoche,
       rel:n===0?'Hoy':n===1?'Mañana':n>1?'En '+n+' días':''
     };
   }
@@ -129,7 +141,7 @@
     var dias=[];items.forEach(function(s){if(dias.indexOf(s.day)<0)dias.push(s.day);});
     var m='Hola Doctoor,\n'+(dias.length===1?'El refuerzo de '+mes+' sería el '+dias[0]:'Los refuerzos de '+mes+' serían '+listaY(dias))+
       '\n'+(horas===1?'Sería 1 hora':'Serían '+fmtH(horas)+' horas');
-    if(S.optMonto&&Number(pl.rate)>0){m+='\nTotal: '+plata(horas*Number(pl.rate));}
+    if(S.optMonto&&sumP(items)>0){m+='\nTotal: '+plata(sumP(items));}
     return m;
   }
   V.cobros=function(){
@@ -138,7 +150,7 @@
     var prog=all.filter(function(s){return s.date>=T&&s.date.slice(0,7)===mk;});
     var por=[];
     S.places.forEach(function(p,i){var it=hechos.filter(function(s){return s.placeId===p.id;});if(it.length)por.push({p:p,i:i,items:it});});
-    var sinTarifa=por.some(function(x){return !(Number(x.p.rate)>0);});
+    var sinTarifa=por.some(function(x){return !tarifas(x.p).dia;});
     var h='<div class="head"><div class="eyebrow">Turnos realizados por cobrar</div><h1>Cobros</h1></div>';
     h+='<div class="month-nav"><button class="icon-btn" data-act="mes" data-d="-1" aria-label="Mes anterior">'+ICON_BACK+'</button><strong class="cap" style="font-size:16px">'+monthLabel(mk)+'</strong><button class="icon-btn" data-act="mes" data-d="1" aria-label="Mes siguiente" style="transform:scaleX(-1)">'+ICON_BACK+'</button></div>';
     h+='<div class="hero" style="gap:6px"><span class="label">Total a cobrar</span><span class="big num" style="font-size:40px">'+plata(sumP(hechos))+'</span><span style="font-size:14px">'+hechos.length+' turnos · '+fmtH(sumH(hechos))+' h en '+por.length+(por.length===1?' lugar':' lugares')+'</span>'+
@@ -150,10 +162,13 @@
       h+='<div class="card toggles" style="padding:8px 14px"><span class="sub" style="padding-top:4px">El mensaje incluye:</span><label class="toggle"><input type="checkbox" id="opt-monto" data-opt="optMonto"'+(S.optMonto?' checked':'')+'> Monto a cobrar</label></div>';
     }
     por.forEach(function(x){
-      var hs=sumH(x.items), rate=Number(x.p.rate)||0, msg=mensaje(x.p,x.items,mk);
+      var hs=sumH(x.items), r=tarifas(x.p), msg=mensaje(x.p,x.items,mk);
+      var hd=x.items.reduce(function(a,s){return a+s.hDia;},0), hn=hs-hd;
       var wa='https://wa.me/?text='+encodeURIComponent(msg);
-      h+='<div class="card cobro"><div class="row"><span class="dot" style="background:'+colorOf(x.p,x.i)+'"></span><span class="place" style="flex:1">'+esc(x.p.name)+'</span><span class="amount num">'+(rate?plata(hs*rate):'—')+'</span></div>'+
-        '<div class="sub num">'+x.items.length+' turnos · '+fmtH(hs)+' h'+(rate?' × '+plata(rate)+'/h':' · sin valor por hora')+'</div>'+
+      var tarifaTxt=!r.dia?' · sin valor por hora':r.dia===r.noche?' × '+plata(r.dia)+'/h':'';
+      var desg=hn?'<div class="sub num">'+fmtH(hd)+' h día'+(r.dia&&r.dia!==r.noche?' × '+plata(r.dia):'')+' · '+fmtH(hn)+' h noche'+(r.dia&&r.dia!==r.noche?' × '+plata(r.noche):'')+'</div>':'';
+      h+='<div class="card cobro"><div class="row"><span class="dot" style="background:'+colorOf(x.p,x.i)+'"></span><span class="place" style="flex:1">'+esc(x.p.name)+'</span><span class="amount num">'+(r.dia?plata(sumP(x.items)):'—')+'</span></div>'+
+        '<div class="sub num">'+x.items.length+(x.items.length===1?' turno':' turnos')+' · '+fmtH(hs)+' h'+tarifaTxt+'</div>'+desg+
         '<div class="tags">'+x.items.map(function(s){return '<span class="tag num">'+s.dow+' '+s.day+' · '+fmtH(s.hours)+' h</span>';}).join('')+'</div>'+
         '<details><summary>Ver mensaje</summary><pre class="msg" id="msg-'+esc(x.p.id)+'">'+esc(msg)+'</pre></details>'+
         '<div class="grid2"><a class="btn btn-sm btn-wa" href="'+esc(wa)+'" target="_blank" rel="noopener">'+ICON_WA+' WhatsApp</a><button class="btn btn-sm btn-ghost" data-act="copy" data-id="'+esc(x.p.id)+'">'+ICON_COPY+' Copiar</button></div></div>';
@@ -162,7 +177,8 @@
   };
   function addPlaceBox(prefix){
     return '<div class="box"><div class="lbl">Nuevo lugar</div><div class="field"><label for="'+prefix+'-nombre">Nombre</label><input class="input" id="'+prefix+'-nombre" data-nl="name" placeholder="Ej: Hospital del Salvador" value="'+esc(S.nl.name)+'" autocomplete="off"></div>'+
-      '<div class="field"><label for="'+prefix+'-valor">Valor por hora ($)</label><input class="input" id="'+prefix+'-valor" data-nl="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Opcional" value="'+esc(S.nl.rate)+'"></div>'+
+      '<div class="grid2"><div class="field"><label for="'+prefix+'-valor">Hora día ($)</label><input class="input" id="'+prefix+'-valor" data-nl="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Opcional" value="'+esc(S.nl.rate)+'"></div>'+
+      '<div class="field"><label for="'+prefix+'-valor-n">Hora noche ($)</label><input class="input" id="'+prefix+'-valor-n" data-nl="rateNoche" type="number" inputmode="numeric" min="0" step="500" placeholder="Igual a día" value="'+esc(S.nl.rateNoche)+'"></div></div>'+
       '<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="cancelAdd">Cancelar</button><button class="btn btn-sm btn-primary" data-act="saveAdd">Agregar</button></div></div>';
   }
   function syncCard(){
@@ -212,7 +228,8 @@
     S.places.forEach(function(p,i){
       var n=S.shifts.filter(function(s){return s.placeId===p.id;}).length;
       h+='<div class="card place-row"><span class="dot" style="width:12px;height:12px;background:'+colorOf(p,i)+'"></span><div class="grow"><span class="place">'+esc(p.name)+'</span><span class="sub" style="font-size:12px">'+n+(n===1?' turno registrado':' turnos registrados')+'</span></div>'+
-         '<div class="rate"><label for="rate-'+esc(p.id)+'">Valor hora ($)</label><input class="input num" id="rate-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" type="number" inputmode="numeric" min="0" step="500" placeholder="Sin valor" value="'+(Number(p.rate)>0?Number(p.rate):'')+'"></div></div>';
+         '<div class="rates"><div class="rate"><label for="rate-'+esc(p.id)+'">Hora día ($)</label><input class="input num" id="rate-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" data-k="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Sin valor" value="'+(Number(p.rate)>0?Number(p.rate):'')+'"></div>'+
+         '<div class="rate"><label for="rate-n-'+esc(p.id)+'">Hora noche ($)</label><input class="input num" id="rate-n-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" data-k="rateNoche" type="number" inputmode="numeric" min="0" step="500" placeholder="Igual" value="'+(Number(p.rateNoche)>0?Number(p.rateNoche):'')+'"></div></div></div>';
     });
     h+='</div>'+(S.addOpen?addPlaceBox('lp'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar lugar</button>');
     h+=syncCard();
@@ -224,12 +241,12 @@
     return h;
   };
   V.nuevo=function(){
-    var f=S.form, pl=placeById(f.placeId), pago=pl&&Number(pl.rate)>0?Number(pl.rate)*(Number(f.hours)||0):0;
+    var f=S.form, pago=calc(placeById(f.placeId),f.start,f.hours).pago;
     var ed=!!S.editId;
     var h='<div class="head-back"><button class="icon-btn" data-go="'+(ed?S.backTo:'inicio')+'" aria-label="Volver">'+ICON_BACK+'</button><h1 style="font-size:28px">'+(ed?'Editar turno':'Nuevo turno')+'</h1></div>';
     h+='<div class="grid2"><div class="field"><label for="f-fecha">Día</label><input class="input" id="f-fecha" type="date" data-f="date" value="'+esc(f.date)+'"></div><div class="field"><label for="f-inicio">Hora de inicio</label><input class="input" id="f-inicio" type="time" data-f="start" value="'+esc(f.start)+'"></div></div>';
     h+='<div class="field"><label for="f-horas">Cantidad de horas</label><div class="chips">'+[6,8,12,24].map(function(x){return '<button class="chip num" data-act="hrs" data-h="'+x+'" aria-pressed="'+(Number(f.hours)===x)+'">'+x+' h</button>';}).join('')+
-       '<input class="input num" id="f-horas" type="number" inputmode="decimal" min="0.5" max="48" step="0.5" data-f="hours" value="'+esc(f.hours)+'" aria-label="Otra cantidad de horas" style="width:72px;height:44px;text-align:center"></div><div class="sub" id="fin-txt">Termina a las '+finLargo(f.start,Number(f.hours)||0)+'</div></div>';
+       '<input class="input num" id="f-horas" type="number" inputmode="decimal" min="0.5" max="48" step="0.5" data-f="hours" value="'+esc(f.hours)+'" aria-label="Otra cantidad de horas" style="width:72px;height:44px;text-align:center"></div><div class="sub" id="fin-txt">'+finTxt(f)+'</div></div>';
     h+='<div class="field"><span class="lbl">Lugar</span><div class="list" style="gap:8px">'+S.places.map(function(p,i){var sel=f.placeId===p.id;return '<button class="opt" data-act="pick" data-id="'+esc(p.id)+'" aria-pressed="'+sel+'"><span class="dot" style="background:'+colorOf(p,i)+'"></span><span>'+esc(p.name)+'</span>'+(sel?'<svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>':'')+'</button>';}).join('')+
        (S.addOpen?addPlaceBox('np'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar nuevo lugar</button>')+'</div></div>';
     h+='<div class="card between" id="pago-box" style="padding:12px 16px"'+(pago?'':' hidden')+'><span class="sub" style="font-size:14px">Monto de este turno</span><strong class="num" id="pago-txt" style="font-size:17px">'+plata(pago)+'</strong></div>';
@@ -246,7 +263,7 @@
     ['inicio','cobros','historial','lugares'].forEach(function(k){var t=document.getElementById('tab-'+k);var on=S.screen===k||(k==='inicio'&&(S.screen==='realizadas'||S.screen==='programadas'));if(on)t.setAttribute('aria-current','page');else t.removeAttribute('aria-current');});
     return y;
   }
-  function go(k){S.screen=k;S.openShift=null;S.confirmDel=null;S.addOpen=false;S.nl={name:'',rate:''};S.error='';S.editId=null;if(k==='nuevo')S.form=newForm();render();window.scrollTo(0,0);}
+  function go(k){S.screen=k;S.openShift=null;S.confirmDel=null;S.addOpen=false;S.nl={name:'',rate:'',rateNoche:''};S.error='';S.editId=null;if(k==='nuevo')S.form=newForm();render();window.scrollTo(0,0);}
   function rerender(){var y=window.scrollY;render();window.scrollTo(0,y);}
 
   async function write(fn,okMsg){
@@ -274,15 +291,15 @@
     else if(a==='hrs'){S.form.hours=Number(b.getAttribute('data-h'));rerender();}
     else if(a==='pick'){S.form.placeId=id;S.error='';rerender();}
     else if(a==='openAdd'){S.addOpen=true;rerender();var i=document.querySelector('[data-nl="name"]');if(i)i.focus();}
-    else if(a==='cancelAdd'){S.addOpen=false;S.nl={name:'',rate:''};rerender();}
+    else if(a==='cancelAdd'){S.addOpen=false;S.nl={name:'',rate:'',rateNoche:''};rerender();}
     else if(a==='saveAdd'){
       var name=(S.nl.name||'').trim(); if(!name){toast('Escribe el nombre del lugar');return;}
       var ex=S.places.filter(function(p){return p.name.toLowerCase()===name.toLowerCase();})[0];
-      if(ex){S.form.placeId=ex.id;S.addOpen=false;S.nl={name:'',rate:''};rerender();toast('Ese lugar ya existe');return;}
+      if(ex){S.form.placeId=ex.id;S.addOpen=false;S.nl={name:'',rate:'',rateNoche:''};rerender();toast('Ese lugar ya existe');return;}
       var newId=Store.newPlaceId(); var maxO=S.places.reduce(function(m,p){return Math.max(m,Number(p.order)||0);},0);
-      var body={id:newId,name:name,rate:Number(S.nl.rate)||0,color:S.places.length%PAL.length,order:maxO+1};
+      var body={id:newId,name:name,rate:Number(S.nl.rate)||0,rateNoche:Number(S.nl.rateNoche)||0,color:S.places.length%PAL.length,order:maxO+1};
       if(S.screen==='nuevo')S.form.placeId=newId;
-      S.addOpen=false;S.nl={name:'',rate:''};
+      S.addOpen=false;S.nl={name:'',rate:'',rateNoche:''};
       write(function(){return Store.addPlace(body);},'Lugar agregado');
     }
     else if(a==='save'){
@@ -327,15 +344,15 @@
   });
   function download(name,text,type){var blob=new Blob([type.indexOf('csv')>=0?'\ufeff'+text:text],{type:type});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);}
   function csvCell(v){v=String(v==null?'':v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-  function toCSV(){var rows=[['Fecha','Día','Inicio','Término','Horas','Lugar','Valor hora','Monto']];sorted().forEach(function(s){rows.push([s.date,DOWL[parse(s.date).getDay()],s.start,finCorto(s.start,s.hours),String(s.hours).replace('.',','),s.place,s.rate||'',s.rate?Math.round(s.pago):'']);});return rows.map(function(r){return r.map(csvCell).join(';');}).join('\r\n');}
+  function toCSV(){var coma=function(n){return String(Math.round(n*100)/100).replace('.',',');};var rows=[['Fecha','Día','Inicio','Término','Horas','Horas día','Horas noche','Lugar','Valor hora día','Valor hora noche','Monto']];sorted().forEach(function(s){var r=tarifas(placeById(s.placeId));rows.push([s.date,DOWL[parse(s.date).getDay()],s.start,finCorto(s.start,s.hours),coma(s.hours),coma(s.hDia),coma(s.hNoche),s.place,r.dia||'',r.noche||'',s.rate?Math.round(s.pago):'']);});return rows.map(function(r){return r.map(csvCell).join(';');}).join('\r\n');}
   function fallbackCopy(pre){if(!pre)return;var d=pre.closest('details');if(d)d.open=true;var r=document.createRange();r.selectNodeContents(pre);var s=window.getSelection();s.removeAllRanges();s.addRange(r);toast('Texto seleccionado: cópialo manualmente');}
 
   document.addEventListener('input',function(ev){
     var t=ev.target;
     if(t.dataset.f){S.form[t.dataset.f]=t.value;S.error='';
-      var fin=document.getElementById('fin-txt'); if(fin)fin.textContent='Termina a las '+finLargo(S.form.start,Number(S.form.hours)||0);
+      var fin=document.getElementById('fin-txt'); if(fin)fin.textContent=finTxt(S.form);
       if(t.dataset.f==='hours')document.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',String(Number(c.dataset.h)===Number(t.value)));});
-      var pl=placeById(S.form.placeId), pago=pl&&Number(pl.rate)>0?Number(pl.rate)*(Number(S.form.hours)||0):0;
+      var pago=calc(placeById(S.form.placeId),S.form.start,S.form.hours).pago;
       var pb=document.getElementById('pago-box'); if(pb){pb.hidden=!pago;document.getElementById('pago-txt').textContent=plata(pago);}
     }
     if(t.dataset.nl){S.nl[t.dataset.nl]=t.value;}
@@ -349,7 +366,7 @@
       file.text().then(function(txt){return Store.importJSON(txt);}).then(function(){toast('Respaldo restaurado');},function(){toast('Ese archivo no es un respaldo válido de la app.');});
       t.value='';return;
     }
-    if(t.dataset.rate){var id=t.dataset.rate,v=Number(t.value)||0;write(function(){return Store.updatePlace(id,{rate:v});},'Valor por hora guardado');}
+    if(t.dataset.rate){var id=t.dataset.rate,patch={};patch[t.dataset.k||'rate']=Math.max(0,Math.round(Number(t.value)||0));write(function(){return Store.updatePlace(id,patch);},'Valor por hora guardado');}
     if(t.dataset.opt){S[t.dataset.opt]=t.checked;lsSet(t.dataset.opt,t.checked);rerender();}
   });
 
