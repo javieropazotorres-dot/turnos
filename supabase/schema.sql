@@ -14,6 +14,10 @@ create table if not exists public.places (
 -- Valor hora de noche (0 = igual al de día). Agregado después; seguro de ejecutar de nuevo.
 alter table public.places add column if not exists rate_noche integer not null default 0 check (rate_noche >= 0);
 
+-- Feriados: el turno se marca como feriado y cada lugar define si ese día se paga todo como noche.
+alter table public.places add column if not exists feriado_noche boolean not null default false;
+alter table public.shifts add column if not exists feriado boolean not null default false;
+
 create table if not exists public.shifts (
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   id text not null,

@@ -31,7 +31,7 @@
     sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{mode:'entrar',email:'',pass:'',busy:false},
     optMonto:lsGet('optMonto',false)
   };
-  function newForm(){return {date:todayKey(),start:'08:00',hours:12,placeId:''};}
+  function newForm(){return {date:todayKey(),start:'08:00',hours:12,placeId:'',feriado:false};}
   S.form=newForm();
 
   var app=document.getElementById('app');
@@ -49,19 +49,24 @@
   }
   // Si falta una de las dos tarifas, se usa la otra.
   function tarifas(pl){var d=pl&&Number(pl.rate)>0?Number(pl.rate):0,n=pl&&Number(pl.rateNoche)>0?Number(pl.rateNoche):0;return {dia:d||n,noche:n||d};}
-  function calc(pl,start,h){h=Number(h)||0;var hd=horasDia(start,h),hn=h-hd,r=tarifas(pl);return {hDia:hd,hNoche:hn,rate:r.dia,pago:hd*r.dia+hn*r.noche};}
+  function feriadoNoche(pl,feriado){return !!(feriado&&pl&&pl.feriadoNoche);}
+  function calc(pl,start,h,feriado){h=Number(h)||0;var hd=feriadoNoche(pl,feriado)?0:horasDia(start,h),hn=h-hd,r=tarifas(pl);return {hDia:hd,hNoche:hn,rate:r.dia,pago:hd*r.dia+hn*r.noche};}
   function tramos(hd,hn){return hd&&hn?fmtH(hd)+' h de día y '+fmtH(hn)+' h de noche':hn?'todo de noche':'todo de día';}
-  function finTxt(f){var h=Number(f.hours)||0,c=calc(null,f.start,h);return 'Termina a las '+finLargo(f.start,h)+(h?' · '+tramos(c.hDia,c.hNoche):'');}
+  function finTxt(f){
+    var h=Number(f.hours)||0,pl=placeById(f.placeId),c=calc(pl,f.start,h,f.feriado);
+    var extra=!h?'':feriadoNoche(pl,f.feriado)?'feriado: todo se paga como noche':tramos(c.hDia,c.hNoche);
+    return 'Termina a las '+finLargo(f.start,h)+(extra?' · '+extra:'');
+  }
   function deco(s){
     var dt=parse(s.date), pl=placeById(s.placeId), T=todayKey(), n=diffDays(s.date,T);
-    var c=calc(pl,s.start,s.hours);
+    var c=calc(pl,s.start,s.hours,s.feriado);
     return {
       id:s.id, date:s.date, start:s.start, hours:Number(s.hours)||0, placeId:s.placeId,
       place:pl?pl.name:(s.placeName||'Lugar'), color:colorOf(pl,0),
       dow:DOW[dt.getDay()], day:dt.getDate(), mon:MES[dt.getMonth()].slice(0,3),
       largo:DOWL[dt.getDay()]+' '+dt.getDate()+' de '+MES[dt.getMonth()],
       ddmm:pad(dt.getDate())+'/'+pad(dt.getMonth()+1),
-      range:s.start+' – '+finCorto(s.start,s.hours),
+      range:s.start+' – '+finCorto(s.start,s.hours), feriado:!!s.feriado,
       rate:c.rate, pago:c.pago, hDia:c.hDia, hNoche:c.hNoche,
       rel:n===0?'Hoy':n===1?'Mañana':n>1?'En '+n+' días':''
     };
@@ -77,7 +82,7 @@
     var open=S.openShift===s.id, conf=S.confirmDel===s.id;
     var h='<div class="list" style="gap:8px"><button class="shift" data-act="toggleShift" data-id="'+esc(s.id)+'" aria-expanded="'+open+'">'+
       '<div class="datebox"><span>'+s.dow+'</span><strong class="num">'+s.day+'</strong><span style="text-transform:none">'+s.mon+'</span></div>'+
-      '<div class="grow"><div class="row" style="gap:8px"><span class="dot" style="background:'+s.color+'"></span><span class="place">'+esc(s.place)+'</span></div><div class="sub num">'+s.range+'</div></div>'+
+      '<div class="grow"><div class="row" style="gap:8px"><span class="dot" style="background:'+s.color+'"></span><span class="place">'+esc(s.place)+'</span></div><div class="sub num">'+s.range+(s.feriado?' · Feriado':'')+'</div></div>'+
       '<div class="right"><b class="num">'+fmtH(s.hours)+' h</b><span class="num">'+(showPago?(s.rate?plata(s.pago):'—'):s.rel)+'</span></div></button>';
     if(open){
       h+= conf
@@ -89,6 +94,15 @@
   function backHead(title,sub){return '<div class="head-back"><button class="icon-btn" data-go="inicio" aria-label="Volver">'+ICON_BACK+'</button><div class="head"><h1 style="font-size:28px">'+title+'</h1>'+(sub?'<div class="eyebrow cap">'+sub+'</div>':'')+'</div></div>';}
   function bar(d){return '<div class="bar">'+d.map(function(x){return '<div style="width:'+x.pct+'%;background:'+x.color+'"></div>';}).join('')+'</div>';}
 
+  var DIA_MS=86400000;
+  function avisoRespaldo(){
+    if(!S.shifts.length||Date.now()<lsGet('backupSnooze',0))return '';
+    var dias=S.lastBackup?Math.floor((Date.now()-new Date(S.lastBackup).getTime())/DIA_MS):null;
+    if(dias!==null&&dias<30)return '';
+    var txt=dias===null?'Todavía no has descargado un respaldo de tus turnos.':'Tu último respaldo fue hace '+dias+' días.';
+    return '<div class="card" role="status" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><strong>Descarga un respaldo</strong><div class="sub">'+txt+' Guárdalo en Drive, iCloud o envíatelo por correo.</div>'+
+      '<div class="grid2"><button class="btn btn-sm btn-ghost" data-act="snoozeBackup">Ahora no</button><button class="btn btn-sm btn-primary" data-act="backup">Descargar</button></div></div>';
+  }
   var V={};
   V.inicio=function(){
     var sp=split(), mk=todayKey().slice(0,7), mesPast=sp.past.filter(function(s){return s.date.slice(0,7)===mk;});
@@ -96,6 +110,7 @@
     var h='<div class="head"><div class="eyebrow cap">'+DOWL[dt.getDay()]+' '+dt.getDate()+' de '+MES[dt.getMonth()]+'</div><h1>Mis turnos</h1></div>';
     h+='<div class="tiles"><button class="tile" data-go="realizadas">'+ICON_CHEV+'<small>Realizadas en '+MES[dt.getMonth()]+'</small><span class="big num">'+fmtH(sumH(mesPast))+' h</span><small>'+mesPast.length+' turnos</small></button>'+
        '<button class="tile" data-go="programadas">'+ICON_CHEV+'<small>Programadas</small><span class="big num">'+fmtH(sumH(sp.up))+' h</span><small>'+sp.up.length+' turnos próximos</small></button></div>';
+    h+=avisoRespaldo();
     if(nx){
       h+='<div class="hero"><div class="between"><span class="label">Próximo turno</span><span class="pill">'+nx.rel+'</span></div>'+
          '<div class="head"><div class="big cap" style="font-size:26px">'+nx.largo+'</div><div style="font-size:16px">'+esc(nx.place)+'</div></div>'+
@@ -229,7 +244,8 @@
       var n=S.shifts.filter(function(s){return s.placeId===p.id;}).length;
       h+='<div class="card place-row"><span class="dot" style="width:12px;height:12px;background:'+colorOf(p,i)+'"></span><div class="grow"><span class="place">'+esc(p.name)+'</span><span class="sub" style="font-size:12px">'+n+(n===1?' turno registrado':' turnos registrados')+'</span></div>'+
          '<div class="rates"><div class="rate"><label for="rate-'+esc(p.id)+'">Hora día ($)</label><input class="input num" id="rate-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" data-k="rate" type="number" inputmode="numeric" min="0" step="500" placeholder="Sin valor" value="'+(Number(p.rate)>0?Number(p.rate):'')+'"></div>'+
-         '<div class="rate"><label for="rate-n-'+esc(p.id)+'">Hora noche ($)</label><input class="input num" id="rate-n-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" data-k="rateNoche" type="number" inputmode="numeric" min="0" step="500" placeholder="Igual" value="'+(Number(p.rateNoche)>0?Number(p.rateNoche):'')+'"></div></div></div>';
+         '<div class="rate"><label for="rate-n-'+esc(p.id)+'">Hora noche ($)</label><input class="input num" id="rate-n-'+esc(p.id)+'" data-rate="'+esc(p.id)+'" data-k="rateNoche" type="number" inputmode="numeric" min="0" step="500" placeholder="Igual" value="'+(Number(p.rateNoche)>0?Number(p.rateNoche):'')+'"></div></div>'+
+         '<label class="toggle" style="flex:1 1 100%"><input type="checkbox" data-fnoche="'+esc(p.id)+'"'+(p.feriadoNoche?' checked':'')+'> Feriado se paga como noche</label></div>';
     });
     h+='</div>'+(S.addOpen?addPlaceBox('lp'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar lugar</button>');
     h+=syncCard();
@@ -241,12 +257,13 @@
     return h;
   };
   V.nuevo=function(){
-    var f=S.form, pago=calc(placeById(f.placeId),f.start,f.hours).pago;
+    var f=S.form, pago=calc(placeById(f.placeId),f.start,f.hours,f.feriado).pago;
     var ed=!!S.editId;
     var h='<div class="head-back"><button class="icon-btn" data-go="'+(ed?S.backTo:'inicio')+'" aria-label="Volver">'+ICON_BACK+'</button><h1 style="font-size:28px">'+(ed?'Editar turno':'Nuevo turno')+'</h1></div>';
     h+='<div class="grid2"><div class="field"><label for="f-fecha">Día</label><input class="input" id="f-fecha" type="date" data-f="date" value="'+esc(f.date)+'"></div><div class="field"><label for="f-inicio">Hora de inicio</label><input class="input" id="f-inicio" type="time" data-f="start" value="'+esc(f.start)+'"></div></div>';
     h+='<div class="field"><label for="f-horas">Cantidad de horas</label><div class="chips">'+[6,8,12,24].map(function(x){return '<button class="chip num" data-act="hrs" data-h="'+x+'" aria-pressed="'+(Number(f.hours)===x)+'">'+x+' h</button>';}).join('')+
-       '<input class="input num" id="f-horas" type="number" inputmode="decimal" min="0.5" max="48" step="0.5" data-f="hours" value="'+esc(f.hours)+'" aria-label="Otra cantidad de horas" style="width:72px;height:44px;text-align:center"></div><div class="sub" id="fin-txt">'+finTxt(f)+'</div></div>';
+       '<input class="input num" id="f-horas" type="number" inputmode="decimal" min="0.5" max="48" step="0.5" data-f="hours" value="'+esc(f.hours)+'" aria-label="Otra cantidad de horas" style="width:72px;height:44px;text-align:center"></div><div class="sub" id="fin-txt">'+finTxt(f)+'</div>'+
+       '<label class="toggle"><input type="checkbox" id="f-feriado" data-fcheck="feriado"'+(f.feriado?' checked':'')+'> Es feriado</label></div>';
     h+='<div class="field"><span class="lbl">Lugar</span><div class="list" style="gap:8px">'+S.places.map(function(p,i){var sel=f.placeId===p.id;return '<button class="opt" data-act="pick" data-id="'+esc(p.id)+'" aria-pressed="'+sel+'"><span class="dot" style="background:'+colorOf(p,i)+'"></span><span>'+esc(p.name)+'</span>'+(sel?'<svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>':'')+'</button>';}).join('')+
        (S.addOpen?addPlaceBox('np'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar nuevo lugar</button>')+'</div></div>';
     h+='<div class="card between" id="pago-box" style="padding:12px 16px"'+(pago?'':' hidden')+'><span class="sub" style="font-size:14px">Monto de este turno</span><strong class="num" id="pago-txt" style="font-size:17px">'+plata(pago)+'</strong></div>';
@@ -280,7 +297,7 @@
       var sh=S.shifts.filter(function(x){return x.id===id;})[0]; if(!sh)return;
       var from=S.screen;
       go('nuevo');
-      S.editId=id;S.backTo=from;S.form={date:sh.date,start:sh.start,hours:Number(sh.hours)||0,placeId:placeById(sh.placeId)?sh.placeId:''};
+      S.editId=id;S.backTo=from;S.form={date:sh.date,start:sh.start,hours:Number(sh.hours)||0,placeId:placeById(sh.placeId)?sh.placeId:'',feriado:!!sh.feriado};
       render();
     }
     else if(a==='askDel'){S.confirmDel=id;rerender();}
@@ -307,7 +324,7 @@
       if(!f.placeId){S.error='Elige el lugar del turno.';rerender();return;}
       if(!f.date||!(hrs>0)){S.error='Revisa el día y la cantidad de horas.';rerender();return;}
       var pl=placeById(f.placeId);
-      var data={date:f.date,start:f.start||'08:00',hours:hrs,placeId:f.placeId,placeName:pl?pl.name:''};
+      var data={date:f.date,start:f.start||'08:00',hours:hrs,placeId:f.placeId,placeName:pl?pl.name:'',feriado:!!f.feriado};
       if(S.editId){
         var eid=S.editId, back=S.backTo;
         write(function(){return Store.updateShift(eid,data).then(function(ok){if(!ok)throw new Error('gone');});},'Cambios guardados');
@@ -325,6 +342,7 @@
       if(!window.confirm('¿Cerrar sesión? Los turnos quedan en este teléfono, pero dejan de sincronizarse.'))return;
       Store.signOut().then(function(){toast('Sesión cerrada');},function(){toast('No se pudo cerrar la sesión. Inténtalo de nuevo.');});
     }
+    else if(a==='snoozeBackup'){lsSet('backupSnooze',Date.now()+7*DIA_MS);rerender();}
     else if(a==='backup'){download('turnos-respaldo-'+todayKey()+'.json',Store.exportJSON(),'application/json');toast('Respaldo descargado');}
     else if(a==='csv'){download('turnos-'+todayKey()+'.csv',toCSV(),'text/csv;charset=utf-8');}
     else if(a==='copy'){
@@ -344,7 +362,7 @@
   });
   function download(name,text,type){var blob=new Blob([type.indexOf('csv')>=0?'\ufeff'+text:text],{type:type});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);}
   function csvCell(v){v=String(v==null?'':v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-  function toCSV(){var coma=function(n){return String(Math.round(n*100)/100).replace('.',',');};var rows=[['Fecha','Día','Inicio','Término','Horas','Horas día','Horas noche','Lugar','Valor hora día','Valor hora noche','Monto']];sorted().forEach(function(s){var r=tarifas(placeById(s.placeId));rows.push([s.date,DOWL[parse(s.date).getDay()],s.start,finCorto(s.start,s.hours),coma(s.hours),coma(s.hDia),coma(s.hNoche),s.place,r.dia||'',r.noche||'',s.rate?Math.round(s.pago):'']);});return rows.map(function(r){return r.map(csvCell).join(';');}).join('\r\n');}
+  function toCSV(){var coma=function(n){return String(Math.round(n*100)/100).replace('.',',');};var rows=[['Fecha','Día','Inicio','Término','Horas','Horas día','Horas noche','Feriado','Lugar','Valor hora día','Valor hora noche','Monto']];sorted().forEach(function(s){var r=tarifas(placeById(s.placeId));rows.push([s.date,DOWL[parse(s.date).getDay()],s.start,finCorto(s.start,s.hours),coma(s.hours),coma(s.hDia),coma(s.hNoche),s.feriado?'Sí':'',s.place,r.dia||'',r.noche||'',s.rate?Math.round(s.pago):'']);});return rows.map(function(r){return r.map(csvCell).join(';');}).join('\r\n');}
   function fallbackCopy(pre){if(!pre)return;var d=pre.closest('details');if(d)d.open=true;var r=document.createRange();r.selectNodeContents(pre);var s=window.getSelection();s.removeAllRanges();s.addRange(r);toast('Texto seleccionado: cópialo manualmente');}
 
   document.addEventListener('input',function(ev){
@@ -352,7 +370,7 @@
     if(t.dataset.f){S.form[t.dataset.f]=t.value;S.error='';
       var fin=document.getElementById('fin-txt'); if(fin)fin.textContent=finTxt(S.form);
       if(t.dataset.f==='hours')document.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',String(Number(c.dataset.h)===Number(t.value)));});
-      var pago=calc(placeById(S.form.placeId),S.form.start,S.form.hours).pago;
+      var pago=calc(placeById(S.form.placeId),S.form.start,S.form.hours,S.form.feriado).pago;
       var pb=document.getElementById('pago-box'); if(pb){pb.hidden=!pago;document.getElementById('pago-txt').textContent=plata(pago);}
     }
     if(t.dataset.nl){S.nl[t.dataset.nl]=t.value;}
@@ -368,6 +386,8 @@
     }
     if(t.dataset.rate){var id=t.dataset.rate,patch={};patch[t.dataset.k||'rate']=Math.max(0,Math.round(Number(t.value)||0));write(function(){return Store.updatePlace(id,patch);},'Valor por hora guardado');}
     if(t.dataset.opt){S[t.dataset.opt]=t.checked;lsSet(t.dataset.opt,t.checked);rerender();}
+    if(t.dataset.fcheck){S.form[t.dataset.fcheck]=t.checked;rerender();}
+    if(t.dataset.fnoche){var fid=t.dataset.fnoche,on=t.checked;write(function(){return Store.updatePlace(fid,{feriadoNoche:on});},on?'Feriado se pagará como noche':'Feriado se pagará según el horario');}
   });
 
   function busy(){var a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='SELECT'||a.tagName==='TEXTAREA')&&app.contains(a);}

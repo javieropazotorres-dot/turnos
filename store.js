@@ -70,14 +70,14 @@
 
   // --- Conversión local ↔ nube ---
   function placeRow(p) {
-    return { user_id: user.id, id: p.id, name: p.name, rate: Math.max(0, Math.round(Number(p.rate) || 0)), rate_noche: Math.max(0, Math.round(Number(p.rateNoche) || 0)), color: Number(p.color) || 0, sort: Number(p.order) || 0 };
+    return { user_id: user.id, id: p.id, name: p.name, rate: Math.max(0, Math.round(Number(p.rate) || 0)), rate_noche: Math.max(0, Math.round(Number(p.rateNoche) || 0)), feriado_noche: !!p.feriadoNoche, color: Number(p.color) || 0, sort: Number(p.order) || 0 };
   }
   function shiftRow(s) {
-    return { user_id: user.id, id: s.id, date: s.date, start: s.start || '08:00', hours: Number(s.hours), place_id: s.placeId, place_name: s.placeName || '', created_at: s.createdAt || new Date().toISOString() };
+    return { user_id: user.id, id: s.id, date: s.date, start: s.start || '08:00', hours: Number(s.hours), place_id: s.placeId, place_name: s.placeName || '', feriado: !!s.feriado, created_at: s.createdAt || new Date().toISOString() };
   }
   function perfilRow(p) { return { user_id: user.id, nombre: p.nombre || '', titulo: p.titulo === 'Dra.' ? 'Dra.' : 'doctora' }; }
-  function fromPlace(r) { return { id: r.id, name: r.name, rate: Number(r.rate) || 0, rateNoche: Number(r.rate_noche) || 0, color: Number(r.color) || 0, order: Number(r.sort) || 0 }; }
-  function fromShift(r) { return { id: r.id, date: r.date, start: r.start, hours: Number(r.hours), placeId: r.place_id, placeName: r.place_name, createdAt: r.created_at }; }
+  function fromPlace(r) { return { id: r.id, name: r.name, rate: Number(r.rate) || 0, rateNoche: Number(r.rate_noche) || 0, feriadoNoche: !!r.feriado_noche, color: Number(r.color) || 0, order: Number(r.sort) || 0 }; }
+  function fromShift(r) { return { id: r.id, date: r.date, start: r.start, hours: Number(r.hours), placeId: r.place_id, placeName: r.place_name, feriado: !!r.feriado, createdAt: r.created_at }; }
 
   // --- Llamadas a Supabase ---
   function check(res) { if (res.error) { throw res.error; } return res.data; }
