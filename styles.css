@@ -45,6 +45,7 @@ h2{margin:0;font-size:16px;font-weight:600}
 .hero .label{font-size:12px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;opacity:.85}
 .pill{font-size:13px;font-weight:600;background:var(--accent-soft);padding:4px 10px;border-radius:999px}
 .row{display:flex;align-items:center;gap:10px}
+[hidden]{display:none!important}
 .between{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .list{display:flex;flex-direction:column;gap:10px}
 .shift{display:flex;align-items:center;gap:14px;padding:12px 14px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:16px}

@@ -16,7 +16,7 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 ## Archivos
 - `index.html` — estructura, barra de navegación inferior, registro del service worker.
 - `styles.css` — tokens de color/tipografía (Fraunces + Instrument Sans) y componentes.
-- `store.js` — capa de datos (`window.Store`), local-first. Siempre guarda en localStorage (`turnos:v1`); con sesión en Supabase encola cada cambio en `turnos:outbox`, lo sube cuando hay red y luego descarga el estado de la nube, que pasa a ser la verdad. Sincroniza al abrir, al volver a la app y al recuperar conexión. La primera vez que un dispositivo entra a una cuenta (`turnos:linked`) sube solo las filas que la nube no tiene, sin pisar las existentes. API async: `init, subscribe, getState (incluye sync: {status, email, pending, lastSync}), addShift, deleteShift, newPlaceId, addPlace, updatePlace, setPerfil, exportJSON, importJSON, signIn, signUp, signOut, syncNow`.
+- `store.js` — capa de datos (`window.Store`), local-first. Siempre guarda en localStorage (`turnos:v1`); con sesión en Supabase encola cada cambio en `turnos:outbox`, lo sube cuando hay red y luego descarga el estado de la nube, que pasa a ser la verdad. Sincroniza al abrir, al volver a la app y al recuperar conexión. La primera vez que un dispositivo entra a una cuenta (`turnos:linked`) sube solo las filas que la nube no tiene, sin pisar las existentes. API async: `init, subscribe, getState (incluye sync: {status, email, pending, lastSync}), addShift, updateShift, deleteShift, newPlaceId, addPlace, updatePlace, setPerfil, exportJSON, importJSON, signIn, signUp, signOut, syncNow`.
 - `config.js` — URL y clave publishable/anon de Supabase. Si están vacías, la app funciona solo local.
 - `supabase/schema.sql` — tablas `places`, `shifts`, `perfil` con RLS por `user_id` (no se sirve; se pega en el SQL Editor).
 - La librería `@supabase/supabase-js` se carga desde jsDelivr con versión fija e `integrity`; `sw.js` la guarda en caché. Al cambiar de versión, actualizar la URL y el hash en `index.html` y `sw.js`.
@@ -39,9 +39,9 @@ Serían <N> horas
 Con un solo día: `El refuerzo de <mes> sería el <día>` / `Sería 1 hora`. Opcional: línea `Total: $<monto>`. Se abre con `https://wa.me/?text=<mensaje codificado>`; también hay botón Copiar.
 
 ## Pendiente / ideas acordadas
-1. **Sincronización en la nube:** implementada en `store.js` (ver arriba). Falta crear el proyecto Supabase y completar `config.js`. `lastBackup` sigue siendo solo local. No hay tiempo real entre dispositivos: se sincroniza al abrir o volver a la app.
+1. **Sincronización en la nube:** hecha. Proyecto Supabase `equebyacfqsobhrljjwv`, cuenta creada con el correo de María Fernanda y registro de cuentas nuevas desactivado. `lastBackup` sigue siendo solo local. No hay tiempo real entre dispositivos: se sincroniza al abrir o volver a la app.
 2. Tarifas distintas por tipo de turno (noche, fin de semana, festivo) o monto fijo por turno.
-3. Editar un turno existente (hoy solo se puede eliminar).
+3. **Editar un turno:** hecho (botón Editar al abrir un turno; reutiliza la vista `nuevo` con `S.editId`).
 4. Recordatorio de respaldo si pasan más de 30 días sin descargar uno.
 
 ## Cómo probar

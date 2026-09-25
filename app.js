@@ -26,7 +26,7 @@
 
   var S={
     status:'loading', places:[], shifts:[], perfil:{nombre:'',titulo:'doctora'}, lastBackup:null,
-    screen:'inicio', cobroMes:todayKey().slice(0,7), openShift:null, confirmDel:null,
+    screen:'inicio', cobroMes:todayKey().slice(0,7), openShift:null, confirmDel:null, editId:null, backTo:'inicio',
     form:null, addOpen:false, nl:{name:'',rate:''}, error:'', editNombre:false,
     sync:{status:'off',email:'',pending:0,lastSync:null}, auth:{mode:'entrar',email:'',pass:'',busy:false},
     optMonto:lsGet('optMonto',false)
@@ -70,7 +70,7 @@
     if(open){
       h+= conf
         ? '<div class="confirm"><button class="btn btn-sm btn-ghost" style="flex:1" data-act="cancelDel">Cancelar</button><button class="btn btn-sm btn-danger" style="flex:1" data-act="doDel" data-id="'+esc(s.id)+'">Sí, eliminar</button></div>'
-        : '<div class="confirm"><button class="btn btn-sm btn-ghost" style="flex:1" data-act="askDel" data-id="'+esc(s.id)+'">Eliminar turno</button></div>';
+        : '<div class="confirm"><button class="btn btn-sm btn-ghost" style="flex:1" data-act="editShift" data-id="'+esc(s.id)+'">Editar</button><button class="btn btn-sm btn-ghost" style="flex:1" data-act="askDel" data-id="'+esc(s.id)+'">Eliminar</button></div>';
     }
     return h+'</div>';
   }
@@ -225,14 +225,15 @@
   };
   V.nuevo=function(){
     var f=S.form, pl=placeById(f.placeId), pago=pl&&Number(pl.rate)>0?Number(pl.rate)*(Number(f.hours)||0):0;
-    var h='<div class="head-back"><button class="icon-btn" data-go="inicio" aria-label="Volver">'+ICON_BACK+'</button><h1 style="font-size:28px">Nuevo turno</h1></div>';
+    var ed=!!S.editId;
+    var h='<div class="head-back"><button class="icon-btn" data-go="'+(ed?S.backTo:'inicio')+'" aria-label="Volver">'+ICON_BACK+'</button><h1 style="font-size:28px">'+(ed?'Editar turno':'Nuevo turno')+'</h1></div>';
     h+='<div class="grid2"><div class="field"><label for="f-fecha">Día</label><input class="input" id="f-fecha" type="date" data-f="date" value="'+esc(f.date)+'"></div><div class="field"><label for="f-inicio">Hora de inicio</label><input class="input" id="f-inicio" type="time" data-f="start" value="'+esc(f.start)+'"></div></div>';
     h+='<div class="field"><label for="f-horas">Cantidad de horas</label><div class="chips">'+[6,8,12,24].map(function(x){return '<button class="chip num" data-act="hrs" data-h="'+x+'" aria-pressed="'+(Number(f.hours)===x)+'">'+x+' h</button>';}).join('')+
        '<input class="input num" id="f-horas" type="number" inputmode="decimal" min="0.5" max="48" step="0.5" data-f="hours" value="'+esc(f.hours)+'" aria-label="Otra cantidad de horas" style="width:72px;height:44px;text-align:center"></div><div class="sub" id="fin-txt">Termina a las '+finLargo(f.start,Number(f.hours)||0)+'</div></div>';
     h+='<div class="field"><span class="lbl">Lugar</span><div class="list" style="gap:8px">'+S.places.map(function(p,i){var sel=f.placeId===p.id;return '<button class="opt" data-act="pick" data-id="'+esc(p.id)+'" aria-pressed="'+sel+'"><span class="dot" style="background:'+colorOf(p,i)+'"></span><span>'+esc(p.name)+'</span>'+(sel?'<svg class="check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>':'')+'</button>';}).join('')+
        (S.addOpen?addPlaceBox('np'):'<button class="btn btn-dashed btn-block" data-act="openAdd">+ Agregar nuevo lugar</button>')+'</div></div>';
     h+='<div class="card between" id="pago-box" style="padding:12px 16px"'+(pago?'':' hidden')+'><span class="sub" style="font-size:14px">Monto de este turno</span><strong class="num" id="pago-txt" style="font-size:17px">'+plata(pago)+'</strong></div>';
-    h+='<button class="btn btn-primary btn-block" style="height:54px;font-size:16px" data-act="save">Guardar turno</button>';
+    h+='<button class="btn btn-primary btn-block" style="height:54px;font-size:16px" data-act="save">'+(ed?'Guardar cambios':'Guardar turno')+'</button>';
     if(S.error)h+='<div class="err" role="alert">'+esc(S.error)+'</div>';
     return h;
   };
@@ -245,7 +246,7 @@
     ['inicio','cobros','historial','lugares'].forEach(function(k){var t=document.getElementById('tab-'+k);var on=S.screen===k||(k==='inicio'&&(S.screen==='realizadas'||S.screen==='programadas'));if(on)t.setAttribute('aria-current','page');else t.removeAttribute('aria-current');});
     return y;
   }
-  function go(k){S.screen=k;S.openShift=null;S.confirmDel=null;S.addOpen=false;S.nl={name:'',rate:''};S.error='';if(k==='nuevo')S.form=newForm();render();window.scrollTo(0,0);}
+  function go(k){S.screen=k;S.openShift=null;S.confirmDel=null;S.addOpen=false;S.nl={name:'',rate:''};S.error='';S.editId=null;if(k==='nuevo')S.form=newForm();render();window.scrollTo(0,0);}
   function rerender(){var y=window.scrollY;render();window.scrollTo(0,y);}
 
   async function write(fn,okMsg){
@@ -258,6 +259,13 @@
     var b=ev.target.closest('[data-act]'); if(!b)return;
     var a=b.getAttribute('data-act'), id=b.getAttribute('data-id');
     if(a==='toggleShift'){S.openShift=S.openShift===id?null:id;S.confirmDel=null;rerender();}
+    else if(a==='editShift'){
+      var sh=S.shifts.filter(function(x){return x.id===id;})[0]; if(!sh)return;
+      var from=S.screen;
+      go('nuevo');
+      S.editId=id;S.backTo=from;S.form={date:sh.date,start:sh.start,hours:Number(sh.hours)||0,placeId:placeById(sh.placeId)?sh.placeId:''};
+      render();
+    }
     else if(a==='askDel'){S.confirmDel=id;rerender();}
     else if(a==='cancelDel'){S.confirmDel=null;rerender();}
     else if(a==='doDel'){S.openShift=null;S.confirmDel=null;write(function(){return Store.deleteShift(id);},'Turno eliminado');}
@@ -282,10 +290,17 @@
       if(!f.placeId){S.error='Elige el lugar del turno.';rerender();return;}
       if(!f.date||!(hrs>0)){S.error='Revisa el día y la cantidad de horas.';rerender();return;}
       var pl=placeById(f.placeId);
-      var data={date:f.date,start:f.start||'08:00',hours:hrs,placeId:f.placeId,placeName:pl?pl.name:'',createdAt:new Date().toISOString()};
-      var dest=f.date>=todayKey()?'inicio':'historial';
-      write(function(){return Store.addShift(data);},'Turno guardado');
-      go(dest);
+      var data={date:f.date,start:f.start||'08:00',hours:hrs,placeId:f.placeId,placeName:pl?pl.name:''};
+      if(S.editId){
+        var eid=S.editId, back=S.backTo;
+        write(function(){return Store.updateShift(eid,data).then(function(ok){if(!ok)throw new Error('gone');});},'Cambios guardados');
+        go(back);
+      }else{
+        data.createdAt=new Date().toISOString();
+        var dest=f.date>=todayKey()?'inicio':'historial';
+        write(function(){return Store.addShift(data);},'Turno guardado');
+        go(dest);
+      }
     }
     else if(a==='authMode'){S.auth.mode=S.auth.mode==='crear'?'entrar':'crear';S.auth.pass='';rerender();}
     else if(a==='syncNow'){Store.syncNow();}

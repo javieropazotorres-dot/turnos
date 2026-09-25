@@ -211,6 +211,13 @@
       data.shifts.push(row); save(); enqueue({ t: 'shift', row: row });
       return row.id;
     },
+    updateShift: async function (id, patch) {
+      var row = null;
+      data.shifts = data.shifts.map(function (s) { if (s.id !== id) { return s; } row = Object.assign({}, s, patch, { id: id }); return row; });
+      if (!row) { return false; }
+      save(); enqueue({ t: 'shift', row: row });
+      return true;
+    },
     deleteShift: async function (id) {
       data.shifts = data.shifts.filter(function (s) { return s.id !== id; }); save();
       enqueue({ t: 'delShift', id: id });
