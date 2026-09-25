@@ -94,6 +94,8 @@
   function backHead(title,sub){return '<div class="head-back"><button class="icon-btn" data-go="inicio" aria-label="Volver">'+ICON_BACK+'</button><div class="head"><h1 style="font-size:28px">'+title+'</h1>'+(sub?'<div class="eyebrow cap">'+sub+'</div>':'')+'</div></div>';}
   function bar(d){return '<div class="bar">'+d.map(function(x){return '<div style="width:'+x.pct+'%;background:'+x.color+'"></div>';}).join('')+'</div>';}
 
+  function tiempos(s){var p=s.date.split('-').map(Number),q=(s.start||'00:00').split(':').map(Number),a=new Date(p[0],p[1]-1,p[2],q[0],q[1]).getTime();return {ini:a,fin:a+(Number(s.hours)||0)*3600000};}
+  function duracion(ms){var m=Math.max(1,Math.ceil(ms/60000)),h=Math.floor(m/60);m=m%60;return h?h+' h'+(m?' '+m+' min':''):m+' min';}
   var DIA_MS=86400000;
   function avisoRespaldo(){
     if(!S.shifts.length||Date.now()<lsGet('backupSnooze',0))return '';
@@ -106,13 +108,19 @@
   var V={};
   V.inicio=function(){
     var sp=split(), mk=todayKey().slice(0,7), mesPast=sp.past.filter(function(s){return s.date.slice(0,7)===mk;});
-    var nx=sp.up[0], rest=sp.up.slice(1), dt=parse(todayKey());
+    var now=Date.now(), all=sorted(), dt=parse(todayKey());
+    var curso=all.filter(function(s){var t=tiempos(s);return t.ini<=now&&now<t.fin;})[0];
+    var futuros=all.filter(function(s){return tiempos(s).ini>now;});
+    var nx=curso||futuros[0], rest=futuros.filter(function(s){return s!==nx;});
     var h='<div class="head"><div class="eyebrow cap">'+DOWL[dt.getDay()]+' '+dt.getDate()+' de '+MES[dt.getMonth()]+'</div><h1>Mis turnos</h1></div>';
-    h+='<div class="tiles"><button class="tile" data-go="realizadas">'+ICON_CHEV+'<small>Realizadas en '+MES[dt.getMonth()]+'</small><span class="big num">'+fmtH(sumH(mesPast))+' h</span><small>'+mesPast.length+' turnos</small></button>'+
-       '<button class="tile" data-go="programadas">'+ICON_CHEV+'<small>Programadas</small><span class="big num">'+fmtH(sumH(sp.up))+' h</span><small>'+sp.up.length+' turnos próximos</small></button></div>';
+    h+='<div class="tiles"><button class="tile" data-go="realizadas">'+ICON_CHEV+'<small>Realizadas en '+MES[dt.getMonth()]+'</small><span class="big num">'+fmtH(sumH(mesPast))+' h</span><small>'+mesPast.length+(mesPast.length===1?' turno':' turnos')+'</small></button>'+
+       '<button class="tile" data-go="programadas">'+ICON_CHEV+'<small>Programadas</small><span class="big num">'+fmtH(sumH(sp.up))+' h</span><small>'+sp.up.length+(sp.up.length===1?' turno próximo':' turnos próximos')+'</small></button></div>';
     h+=avisoRespaldo();
     if(nx){
-      h+='<div class="hero"><div class="between"><span class="label">Próximo turno</span><span class="pill">'+nx.rel+'</span></div>'+
+      var tn=tiempos(nx);
+      var etiqueta=curso?'Turno en curso':'Próximo turno';
+      var pill=curso?'Quedan '+duracion(tn.fin-now):tn.ini-now<12*3600000?'En '+duracion(tn.ini-now):nx.rel;
+      h+='<div class="hero"><div class="between"><span class="label">'+etiqueta+'</span><span class="pill">'+pill+'</span></div>'+
          '<div class="head"><div class="big cap" style="font-size:26px">'+nx.largo+'</div><div style="font-size:16px">'+esc(nx.place)+'</div></div>'+
          '<div class="row" style="gap:20px;font-size:14px"><span class="num">'+nx.range+'</span><strong class="num">'+fmtH(nx.hours)+' h</strong></div></div>';
     }
@@ -395,6 +403,9 @@
   function liveRender(){ if(busy()){pending=true;return;} rerender(); }
   document.addEventListener('focusout',function(){setTimeout(function(){if(pending&&!busy()){pending=false;rerender();}},0);});
 
+  function refrescarInicio(){if(S.status==='ok'&&S.screen==='inicio'&&!document.hidden)liveRender();}
+  setInterval(refrescarInicio,60000);
+  document.addEventListener('visibilitychange',refrescarInicio);
   function apply(st){S.places=st.places;S.shifts=st.shifts.filter(function(x){return typeof x.date==='string'&&x.date.length===10;});S.perfil=st.perfil;S.lastBackup=st.lastBackup;S.sync=st.sync;}
   render();
   (async function(){

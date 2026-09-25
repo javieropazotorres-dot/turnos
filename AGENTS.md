@@ -27,7 +27,7 @@ Usuarios: ella (uso diario en el teléfono) y su pareja Javier (mantiene el cód
 ## Modelo de datos
 - `places[]`: `{ id, name, rate (valor hora día CLP, 0 = sin definir), rateNoche (valor hora noche, 0 = igual al de día), feriadoNoche (bool: en feriado todas las horas se pagan como noche), color (índice de paleta 0–6), order }` — en Supabase `rate_noche`, `feriado_noche` y `sort`.
 - Día/noche: cada hora del turno se cobra según cae entre `DIA_INI` y `DIA_FIN` (08:00–20:00, constantes en `app.js`); el resto es noche. Un turno que cruza ambos se divide (ej. 14:00 + 12 h = 6 h día + 6 h noche).
-- `shifts[]`: `{ id, date, start, hours, placeId, placeName, feriado (bool), createdAt }` — un turno es "realizado" si `date < hoy`, "programado" si `date >= hoy`.
+- `shifts[]`: `{ id, date, start, hours, placeId, placeName, feriado (bool), createdAt }` — un turno es "realizado" si `date < hoy`, "programado" si `date >= hoy`. El recuadro grande de Inicio usa la hora real: muestra el turno en curso (inicio ≤ ahora < fin, aunque haya empezado ayer) o, si no hay, el próximo que aún no empieza; se refresca cada minuto.
 - `perfil`: `{ nombre, titulo ('doctora' | 'Dra.') }`
 - `lastBackup`: ISO string o null.
 
